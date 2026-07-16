@@ -46,6 +46,18 @@ export function createHomeDashboardModel(options) {
   };
 }
 
+export function shouldShowCompletionModal({
+  summary,
+  currentRound,
+  dismissedRoundId
+}) {
+  return Boolean(
+    summary &&
+    !currentRound &&
+    summary.roundId !== dismissedRoundId
+  );
+}
+
 function createRoundView(round) {
   const totalCount = round.wordKeys.length;
   const masteredCount = round.wordKeys.filter(

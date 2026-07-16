@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHomeDashboardModel } from "../js/ui/home-dashboard.js";
+import {
+  createHomeDashboardModel,
+  shouldShowCompletionModal
+} from "../js/ui/home-dashboard.js";
 
 test("dashboard derives global counts, round progress, and review ranking", () => {
   const allWordKeys = ["alpha", "beta", "gamma", "delta"];
@@ -46,4 +49,24 @@ test("dashboard returns safe empty values without an active round", () => {
   assert.equal(model.rememberedPercent, 0);
   assert.equal(model.round, null);
   assert.deepEqual(model.topReviewWords, []);
+});
+
+test("completion modal only opens for a newly completed round", () => {
+  const summary = { roundId: "round-completed" };
+
+  assert.equal(shouldShowCompletionModal({
+    summary,
+    currentRound: null,
+    dismissedRoundId: null
+  }), true);
+  assert.equal(shouldShowCompletionModal({
+    summary,
+    currentRound: null,
+    dismissedRoundId: "round-completed"
+  }), false);
+  assert.equal(shouldShowCompletionModal({
+    summary,
+    currentRound: { id: "round-active" },
+    dismissedRoundId: null
+  }), false);
 });

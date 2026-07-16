@@ -37,6 +37,27 @@ test("creates preset rounds containing 20, 30, and 50 distinct words", () => {
   }
 });
 
+test("a preloaded word remains the first word without changing round size", () => {
+  const round = createRound({
+    eligibleWordKeys: allWordKeys,
+    learning: learningWith(),
+    requestedSize: 20,
+    firstWordKey: "word-60",
+    random: () => 0.25
+  });
+
+  assert.equal(round.wordKeys[0], "word-60");
+  assert.equal(round.wordKeys.length, 20);
+  assert.equal(new Set(round.wordKeys).size, 20);
+  assert.equal(round.progressByWord["word-60"].hasBeenShown, false);
+  assert.throws(() => createRound({
+    eligibleWordKeys: allWordKeys,
+    learning: learningWith(),
+    requestedSize: 20,
+    firstWordKey: "missing-word"
+  }), /预加载词条/);
+});
+
 test("custom size must be at least five and no more than available words", () => {
   assert.throws(() => createSizedRound(4), /5/);
   assert.throws(() => createSizedRound(61), /60/);

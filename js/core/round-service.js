@@ -12,6 +12,7 @@ export function createRound(options) {
     eligibleWordKeys = [],
     learning = { byWordKey: {} },
     requestedSize,
+    firstWordKey = null,
     createdAt = new Date().toISOString(),
     id = createRoundId(createdAt),
     random = Math.random
@@ -29,6 +30,9 @@ export function createRound(options) {
     requestedSize > availableWordKeys.length
   ) {
     throw new RangeError(`轮次数量必须在 ${MIN_ROUND_SIZE} 到 ${availableWordKeys.length} 之间。`);
+  }
+  if (firstWordKey !== null && !availableWordKeys.includes(firstWordKey)) {
+    throw new RangeError("预加载词条不在当前可用词范围内。");
   }
 
   const reviewWords = availableWordKeys
@@ -50,7 +54,13 @@ export function createRound(options) {
     }),
     random
   );
-  const wordKeys = [...reviewWords, ...unseenNewWords, ...seenNewWords].slice(0, requestedSize);
+  const orderedWordKeys = [...reviewWords, ...unseenNewWords, ...seenNewWords];
+  const wordKeys = firstWordKey === null
+    ? orderedWordKeys.slice(0, requestedSize)
+    : [
+      firstWordKey,
+      ...orderedWordKeys.filter((wordKey) => wordKey !== firstWordKey)
+    ].slice(0, requestedSize);
 
   return {
     id,

@@ -55,6 +55,9 @@ function createPersistedState() {
     }
   };
   state.practice.mode = "intensive";
+  state.practice.roundPreparation = false;
+  state.practice.roundPreparationSize = null;
+  state.practice.roundPreparationCustom = false;
   state.practice.freeAttemptCount = 12;
   state.practice.reviewQueue = [{
     wordKey: "critical",
@@ -102,6 +105,9 @@ test("state saves and restores learning and the active question", () => {
   assert.equal(loaded.practice.activeQuestion.phase, "graded");
   assert.equal(loaded.practice.activeQuestion.result.isCorrect, true);
   assert.equal(loaded.practice.mode, "intensive");
+  assert.equal(loaded.practice.roundPreparation, false);
+  assert.equal(loaded.practice.roundPreparationSize, null);
+  assert.equal(loaded.practice.roundPreparationCustom, false);
   assert.equal(loaded.practice.freeAttemptCount, 12);
   assert.equal(loaded.practice.reviewQueue.length, 1);
   assert.equal(loaded.rounds.current.id, "round-persisted");
@@ -117,10 +123,35 @@ test("missing fields recover to safe defaults", () => {
   assert.deepEqual(loaded.learning, { byWordKey: {} });
   assert.equal(loaded.practice.activeQuestion, null);
   assert.equal(loaded.practice.mode, "random");
+  assert.equal(loaded.practice.roundPreparation, false);
+  assert.equal(loaded.practice.roundPreparationSize, null);
+  assert.equal(loaded.practice.roundPreparationCustom, false);
   assert.equal(loaded.practice.freeAttemptCount, 0);
   assert.deepEqual(loaded.practice.reviewQueue, []);
   assert.deepEqual(loaded.rounds, { current: null, lastCompletedSummary: null });
   assert.deepEqual(loaded.vocabulary, vocabulary);
+});
+
+test("round preparation persists only with a valid preview question and no active round", () => {
+  const storage = new MemoryStorage();
+  const state = createPersistedState();
+  state.rounds.current = null;
+  state.practice.roundPreparation = true;
+  state.practice.roundPreparationSize = 20;
+  state.practice.roundPreparationCustom = true;
+  storage.setItem(STORAGE_KEY, JSON.stringify(state));
+
+  const loaded = loadAppState({ storage, ...context });
+  assert.equal(loaded.practice.roundPreparation, true);
+  assert.equal(loaded.practice.roundPreparationSize, 20);
+  assert.equal(loaded.practice.roundPreparationCustom, true);
+
+  state.rounds.current = createPersistedState().rounds.current;
+  storage.setItem(STORAGE_KEY, JSON.stringify(state));
+  const loadedWithRound = loadAppState({ storage, ...context });
+  assert.equal(loadedWithRound.practice.roundPreparation, false);
+  assert.equal(loadedWithRound.practice.roundPreparationSize, null);
+  assert.equal(loadedWithRound.practice.roundPreparationCustom, false);
 });
 
 test("illegal learning status and counts recover independently", () => {

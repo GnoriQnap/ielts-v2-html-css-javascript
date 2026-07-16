@@ -20,6 +20,7 @@
 * { box-sizing: border-box; }
 html { min-width: 0; scroll-behavior: smooth; }
 body { margin: 0; min-width: 0; overflow-x: hidden; background: #f4f6f8; }
+body.modal-open { overflow: hidden; }
 button, select, input { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
@@ -201,6 +202,44 @@ h1, h2, p { margin-top: 0; }
 .round-active strong { overflow-wrap: anywhere; }
 .round-summary { margin: 0 0 0 auto; color: var(--green-dark); font-size: 13px; font-weight: 700; }
 
+.completion-modal {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  padding: 24px;
+  place-items: center;
+  overflow-y: auto;
+  background: rgb(18 33 49 / 58%);
+  backdrop-filter: blur(2px);
+}
+.completion-card {
+  width: min(100%, 520px);
+  padding: 30px;
+  border: 1px solid #bfe3cf;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #f4fcf7, #fff 64%);
+  box-shadow: 0 24px 70px rgb(11 35 24 / 24%);
+  text-align: center;
+  animation: completion-arrive 260ms ease-out both;
+}
+.completion-icon { margin-bottom: 10px; font-size: 46px; line-height: 1; }
+.completion-card h2 { margin: 4px 0 12px; font-size: 26px; }
+.completion-message { margin: 0 0 24px; color: var(--muted); font-size: 16px; }
+.completion-message strong { color: var(--green-dark); font-size: 21px; }
+.completion-actions { display: flex; justify-content: center; gap: 10px; }
+.abandon-confirm-card { width: min(100%, 440px); }
+.abandon-confirm-card h2 { margin-top: 0; }
+
+@keyframes completion-arrive {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .completion-card { animation: none; }
+}
+
 .practice-card { padding: 30px clamp(24px, 5vw, 62px) 30px; }
 .question-meta { text-align: center; }
 .question-type { color: var(--green-dark); font-weight: 700; }
@@ -214,6 +253,7 @@ h1, h2, p { margin-top: 0; }
   letter-spacing: -0.035em;
 }
 .prompt { margin-bottom: 26px; color: var(--muted); text-align: center; font-size: 17px; }
+.prompt.prompt-multiple { color: var(--green-dark); font-weight: 700; }
 .question-round-status {
   margin: -10px 0 20px;
   color: #526175;
@@ -222,6 +262,7 @@ h1, h2, p { margin-top: 0; }
   font-weight: 700;
 }
 .question-round-status p { margin-bottom: 0; }
+.round-mastered-count { color: var(--green-dark); font-weight: 800; }
 .last-round-word-hint { margin-top: 5px; color: #a56600; }
 .word-summary { text-align: center; }
 
@@ -383,13 +424,23 @@ h1, h2, p { margin-top: 0; }
   }
   .brand { grid-column: 1 / -1; justify-content: center; font-size: 20px; }
   .brand-mark { width: 28px; height: 28px; flex-basis: 28px; font-size: 17px; }
-  .primary-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
-  .primary-nav .nav-link:nth-child(n + 3) { display: none; }
-  .primary-nav .nav-start-round { display: none; }
-  .primary-nav { grid-template-columns: 1fr; }
+  .primary-nav {
+    display: grid;
+    grid-column: 2;
+    grid-row: 2;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 2px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: #fff;
+    gap: 2px;
+  }
+  .primary-nav .nav-link-current, .primary-nav .nav-start-round { display: none; }
+  .primary-nav .nav-link:nth-child(n + 3) { display: inline-flex; }
   .mode-switch {
     display: grid;
-    grid-column: auto;
+    grid-column: 1;
+    grid-row: 2;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     width: auto;
     padding: 2px;
@@ -399,7 +450,7 @@ h1, h2, p { margin-top: 0; }
     min-width: 0;
     min-height: 34px;
     padding: 4px 5px;
-    font-size: 12px;
+    font-size: 11px;
     line-height: 1.2;
     text-align: center;
     white-space: normal;
@@ -438,4 +489,9 @@ h1, h2, p { margin-top: 0; }
   .decision-actions { flex-direction: column; }
   .actions .button, .decision-actions .button { width: 100%; min-width: 0; }
   .sidebar-card { padding: 17px; }
+  .completion-modal { padding: 16px; }
+  .completion-card { width: min(100%, 358px); padding: 24px 18px; }
+  .completion-card h2 { font-size: 22px; }
+  .completion-actions { display: grid; grid-template-columns: 1fr; }
+  .completion-actions .button { width: 100%; }
 }

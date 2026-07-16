@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="./css/base.css">
   </head>
   <body>
-    <header class="topbar">
+    <header id="site-header" class="topbar">
       <div class="topbar-inner">
         <a class="brand" href="#practice-card" aria-label="IELTS 同义替换练习首页">
           <span class="brand-mark" aria-hidden="true">I</span>
@@ -29,7 +29,7 @@
       </div>
     </header>
 
-    <main class="practice-shell">
+    <main id="practice-main" class="practice-shell">
       <div class="workspace-grid">
         <div class="workspace-primary">
           <section class="stats-panel" aria-label="总体学习进度">
@@ -46,10 +46,7 @@
 
           <section id="round-panel" class="round-panel" aria-label="学习轮次">
             <div class="round-panel-title">
-              <div>
-                <span class="section-kicker">固定学习批次</span>
-                <strong>学习轮次</strong>
-              </div>
+              <strong>学习轮次</strong>
             </div>
             <div id="round-setup" class="round-setup">
               <label for="round-size">本轮词条数</label>
@@ -59,7 +56,7 @@
                 <option value="50">50</option>
                 <option value="custom">自定义</option>
               </select>
-              <input id="custom-round-size" type="number" min="5" inputmode="numeric" value="30" aria-label="自定义轮次词条数" hidden>
+              <input id="custom-round-size" type="number" min="5" inputmode="numeric" placeholder="输入数量" aria-label="自定义轮次词条数" hidden>
               <button id="start-round" class="button button-primary button-compact" type="button">开始新一轮</button>
             </div>
             <div id="round-active" class="round-active" hidden>
@@ -78,7 +75,11 @@
 
             <div class="question-utility-row">
               <div id="question-round-status" class="question-round-status" aria-live="polite" hidden>
-                <p id="question-round-progress">当前轮次进度：已掌握 0 / 总数 0</p>
+                <p id="question-round-progress">
+                  当前轮次进度：已掌握
+                  <strong id="question-round-mastered" class="round-mastered-count">0</strong>
+                  / 总数 <span id="question-round-total">0</span>
+                </p>
                 <p id="last-round-word-hint" class="last-round-word-hint" hidden>本轮仅剩 1 个词，需要掌握后才能完成本轮</p>
               </div>
             </div>
@@ -128,6 +129,45 @@
         </aside>
       </div>
     </main>
-    <script type="module" src="./js/app.js"></script>
+
+    <div
+      id="completion-modal"
+      class="completion-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="round-completion-title"
+      hidden
+    >
+      <section class="completion-card">
+        <div class="completion-icon" aria-hidden="true">🎉</div>
+        <span class="section-kicker">本轮学习完成</span>
+        <h2 id="round-completion-title">恭喜完成本轮学习！</h2>
+        <p class="completion-message">本轮成功掌握 <strong id="completion-total">0</strong> 个词</p>
+        <div class="completion-actions">
+          <button id="start-next-round" class="button button-primary" type="button">开始下一轮</button>
+          <button id="completion-intensive" class="button button-outline" type="button">待强化专练</button>
+        </div>
+      </section>
+    </div>
+
+    <div
+      id="abandon-confirm-modal"
+      class="completion-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="abandon-confirm-title"
+      hidden
+    >
+      <section class="completion-card abandon-confirm-card">
+        <h2 id="abandon-confirm-title">确定放弃本轮学习？</h2>
+        <p class="completion-message">当前进度将清空</p>
+        <div class="completion-actions">
+          <button id="cancel-abandon" class="button button-quiet" type="button">取消</button>
+          <button id="confirm-abandon" class="button button-secondary" type="button">确认放弃</button>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="./js/app.js?v=5.16"></script>
   </body>
 </html>

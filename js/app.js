@@ -11,7 +11,7 @@ import {
   LEARNING_STATUSES,
   recordAnswer
 } from "./core/learning-service.js";
-import { loadAppState, saveAppState } from "./core/storage.js";
+import { loadAppState, saveAppState } from "./core/storage.js?v=5.15";
 import {
   PRACTICE_MODES,
   removeReviewItem,
@@ -25,17 +25,25 @@ import {
   createRound,
   getRoundEligibleWordKeys,
   markRoundWordShown,
+  PRESET_ROUND_SIZES,
   recordRoundAnswer
-} from "./core/round-service.js";
-import { createHomeDashboardModel } from "./ui/home-dashboard.js";
+} from "./core/round-service.js?v=5.13";
+import {
+  createHomeDashboardModel,
+  shouldShowCompletionModal
+} from "./ui/home-dashboard.js?v=5.9";
 
 const report = validateVocabularyData(vocabularyData);
 const elements = {
+  siteHeader: document.querySelector("#site-header"),
+  practiceMain: document.querySelector("#practice-main"),
   type: document.querySelector("#question-type"),
   word: document.querySelector("#word-heading"),
   prompt: document.querySelector("#question-prompt"),
   questionRoundStatus: document.querySelector("#question-round-status"),
   questionRoundProgress: document.querySelector("#question-round-progress"),
+  questionRoundMastered: document.querySelector("#question-round-mastered"),
+  questionRoundTotal: document.querySelector("#question-round-total"),
   lastRoundWordHint: document.querySelector("#last-round-word-hint"),
   wordStatus: document.querySelector("#word-status"),
   options: document.querySelector("#options"),
@@ -56,6 +64,13 @@ const elements = {
   roundProgress: document.querySelector("#round-progress"),
   abandonRound: document.querySelector("#abandon-round"),
   roundSummary: document.querySelector("#round-summary"),
+  completionModal: document.querySelector("#completion-modal"),
+  completionTotal: document.querySelector("#completion-total"),
+  startNextRound: document.querySelector("#start-next-round"),
+  completionIntensive: document.querySelector("#completion-intensive"),
+  abandonConfirmModal: document.querySelector("#abandon-confirm-modal"),
+  cancelAbandon: document.querySelector("#cancel-abandon"),
+  confirmAbandon: document.querySelector("#confirm-abandon"),
   overallProgressCount: document.querySelector("#overall-progress-count"),
   overallProgressBar: document.querySelector("#overall-progress-bar"),
   reviewCountStat: document.querySelector("#review-count-stat"),
@@ -65,6 +80,9 @@ const elements = {
 
 let appState = null;
 let persistenceError = "";
+let dismissedCompletionRoundId = null;
+let completionWasOpen = false;
+let isAbandonConfirmationOpen = false;
 
 elements.submit.addEventListener("click", submitAnswer);
 elements.markReview.addEventListener("click", () => chooseMasteryStatus(LEARNING_STATUSES.REVIEW));
@@ -72,9 +90,14 @@ elements.markRemembered.addEventListener("click", () => chooseMasteryStatus(LEAR
 elements.next.addEventListener("click", showNextQuestion);
 elements.modeRandom.addEventListener("click", () => changeMode(PRACTICE_MODES.RANDOM));
 elements.modeIntensive.addEventListener("click", () => changeMode(PRACTICE_MODES.INTENSIVE));
-elements.roundSize.addEventListener("change", renderRoundControls);
+elements.roundSize.addEventListener("change", handleRoundSizeChange);
+elements.customRoundSize.addEventListener("input", handleRoundSizeChange);
 elements.startRound.addEventListener("click", startNewRound);
-elements.abandonRound.addEventListener("click", abandonCurrentRound);
+elements.abandonRound.addEventListener("click", openAbandonConfirmation);
+elements.cancelAbandon.addEventListener("click", closeAbandonConfirmation);
+elements.confirmAbandon.addEventListener("click", confirmAbandonCurrentRound);
+elements.startNextRound.addEventListener("click", startNextRoundFromCompletion);
+elements.completionIntensive.addEventListener("click", openCompletionIntensive);
 
 if (report.isValid) {
   appState = loadAppState({
@@ -83,6 +106,7 @@ if (report.isValid) {
     validGroupIds: new Set(report.index.groupById.keys()),
     correctGroupIdsByWordKey: report.index.groupIdsByWordKey
   });
+  dismissedCompletionRoundId = appState.rounds.lastCompletedSummary?.roundId ?? null;
 
   if (!isActiveQuestionAllowedInMode()) {
     replaceActiveQuestion();
@@ -137,14 +161,10 @@ function replaceActiveQuestion() {
     learning: nextLearning,
     practice: {
       ...appState.practice,
-      activeQuestion: question ? {
-        wordKey: question.wordKey,
-        optionGroupIds: question.options.map((option) => option.groupId),
-        correctGroupIds: [...question.correctGroupIds],
-        selectedGroupIds: [],
-        phase: "answering",
-        result: null
-      } : null
+      activeQuestion: question ? createActiveQuestion(question) : null,
+      roundPreparation: false,
+      roundPreparationSize: null,
+      roundPreparationCustom: false
     },
     rounds: {
       ...appState.rounds,
@@ -152,6 +172,17 @@ function replaceActiveQuestion() {
     }
   };
   persistState();
+}
+
+function createActiveQuestion(question) {
+  return {
+    wordKey: question.wordKey,
+    optionGroupIds: question.options.map((option) => option.groupId),
+    correctGroupIds: [...question.correctGroupIds],
+    selectedGroupIds: [],
+    phase: "answering",
+    result: null
+  };
 }
 
 function renderActiveQuestion() {
@@ -172,8 +203,9 @@ function renderActiveQuestion() {
   elements.type.textContent = isMultiple ? "多选题" : "单选题";
   elements.word.textContent = report.index.displayByWordKey.get(activeQuestion.wordKey);
   elements.prompt.textContent = isMultiple
-    ? "该词对应多个分类，请全部选择"
+    ? "请选择所有对应的语义分类"
     : "请选择对应的语义分类";
+  elements.prompt.classList.toggle("prompt-multiple", isMultiple);
   elements.wordStatus.textContent = `状态：${statusLabel(record.status)}`;
   elements.wordStatus.dataset.status = record.status;
   renderOptions(activeQuestion, isMultiple);
@@ -184,7 +216,8 @@ function renderOptions(activeQuestion, isMultiple) {
   elements.options.replaceChildren();
   const selectedGroupIds = new Set(activeQuestion.selectedGroupIds);
   const correctGroupIds = new Set(activeQuestion.correctGroupIds);
-  const isLocked = activeQuestion.phase !== "answering";
+  const isGraded = activeQuestion.phase !== "answering";
+  const isLocked = isGraded || appState.practice.roundPreparation;
 
   activeQuestion.optionGroupIds.forEach((groupId, index) => {
     const button = document.createElement("button");
@@ -200,9 +233,9 @@ function renderOptions(activeQuestion, isMultiple) {
     if (!isLocked && selected) {
       button.classList.add("selected");
     }
-    if (isLocked && correctGroupIds.has(groupId)) {
+    if (isGraded && correctGroupIds.has(groupId)) {
       button.classList.add("correct");
-    } else if (isLocked && selected) {
+    } else if (isGraded && selected) {
       button.classList.add("incorrect");
     }
 
@@ -219,6 +252,13 @@ function renderOptions(activeQuestion, isMultiple) {
 function renderQuestionActions(activeQuestion) {
   elements.feedback.textContent = "";
   elements.feedback.className = "feedback";
+  if (appState.practice.roundPreparation) {
+    elements.submit.hidden = true;
+    elements.submit.disabled = true;
+    elements.decisions.hidden = true;
+    elements.next.hidden = true;
+    return;
+  }
   elements.submit.hidden = activeQuestion.phase !== "answering";
   elements.submit.disabled = activeQuestion.phase !== "answering";
   const isCorrectWaitingDecision = (
@@ -252,7 +292,7 @@ function renderQuestionActions(activeQuestion) {
 
 function toggleOption(groupId, isMultiple) {
   const activeQuestion = appState.practice.activeQuestion;
-  if (activeQuestion.phase !== "answering") {
+  if (appState.practice.roundPreparation || activeQuestion.phase !== "answering") {
     return;
   }
 
@@ -282,7 +322,7 @@ function toggleOption(groupId, isMultiple) {
 
 function submitAnswer() {
   const activeQuestion = appState.practice.activeQuestion;
-  if (activeQuestion.phase !== "answering") {
+  if (appState.practice.roundPreparation || activeQuestion.phase !== "answering") {
     return;
   }
   if (activeQuestion.selectedGroupIds.length === 0) {
@@ -437,9 +477,9 @@ function renderModeControls(activeQuestion) {
   const isRandom = appState.practice.mode === PRACTICE_MODES.RANDOM;
   elements.modeRandom.setAttribute("aria-pressed", String(isRandom));
   elements.modeIntensive.setAttribute("aria-pressed", String(!isRandom));
-  const isDecisionPending = activeQuestion?.phase === "graded";
-  elements.modeRandom.disabled = isDecisionPending;
-  elements.modeIntensive.disabled = isDecisionPending;
+  const controlsLocked = activeQuestion?.phase === "graded" || appState.practice.roundPreparation;
+  elements.modeRandom.disabled = controlsLocked;
+  elements.modeIntensive.disabled = controlsLocked;
 }
 
 function renderEmptyState() {
@@ -451,6 +491,7 @@ function renderEmptyState() {
   elements.prompt.textContent = isRoundIntensive
     ? "切换到随机练习继续本轮学习。"
     : "答错或主动加入待强化后，可在这里集中练习。";
+  elements.prompt.classList.remove("prompt-multiple");
   elements.wordStatus.textContent = "";
   elements.wordStatus.removeAttribute("data-status");
   elements.options.replaceChildren();
@@ -470,22 +511,54 @@ function startNewRound() {
   const availableWordKeys = getEligibleWordKeys(report.index).filter(
     (wordKey) => getLearningRecord(appState.learning, wordKey).status !== LEARNING_STATUSES.REMEMBERED
   );
-  const requestedSize = elements.roundSize.value === "custom"
-    ? Number(elements.customRoundSize.value)
-    : Number(elements.roundSize.value);
+  const requestedSize = getSelectedRoundSize();
 
   try {
+    const preparedQuestion = appState.practice.roundPreparation
+      ? appState.practice.activeQuestion
+      : null;
     const round = createRound({
       eligibleWordKeys: getEligibleWordKeys(report.index),
       learning: appState.learning,
       requestedSize,
+      firstWordKey: preparedQuestion?.wordKey ?? null,
       createdAt: new Date().toISOString()
     });
+    if (preparedQuestion) {
+      const shown = markRoundWordShown({
+        round,
+        learning: appState.learning,
+        wordKey: preparedQuestion.wordKey
+      });
+      appState = {
+        ...appState,
+        learning: shown.learning,
+        practice: {
+          ...appState.practice,
+          mode: PRACTICE_MODES.RANDOM,
+          activeQuestion: preparedQuestion,
+          roundPreparation: false,
+          roundPreparationSize: null,
+          roundPreparationCustom: false
+        },
+        rounds: {
+          ...appState.rounds,
+          current: shown.round
+        }
+      };
+      persistState();
+      renderActiveQuestion();
+      return;
+    }
     appState = {
       ...appState,
       practice: {
         ...appState.practice,
-        activeQuestion: null
+        mode: PRACTICE_MODES.RANDOM,
+        activeQuestion: null,
+        roundPreparation: false,
+        roundPreparationSize: null,
+        roundPreparationCustom: false
       },
       rounds: {
         ...appState.rounds,
@@ -502,21 +575,78 @@ function startNewRound() {
   elements.customRoundSize.max = String(availableWordKeys.length);
 }
 
-function abandonCurrentRound() {
-  if (!appState.rounds.current || appState.practice.activeQuestion?.phase === "graded") {
+function openAbandonConfirmation() {
+  if (!appState.rounds.current) {
     return;
   }
 
+  isAbandonConfirmationOpen = true;
+  renderRoundControls();
+  elements.cancelAbandon.focus();
+}
+
+function closeAbandonConfirmation() {
+  isAbandonConfirmationOpen = false;
+  renderRoundControls();
+  elements.abandonRound.focus();
+}
+
+function confirmAbandonCurrentRound() {
+  if (!appState.rounds.current) {
+    closeAbandonConfirmation();
+    return;
+  }
+
+  dismissedCompletionRoundId = appState.rounds.lastCompletedSummary?.roundId ?? null;
+  isAbandonConfirmationOpen = false;
+  enterNextRoundPreparation();
+}
+
+function startNextRoundFromCompletion() {
+  dismissedCompletionRoundId = appState.rounds.lastCompletedSummary?.roundId ?? null;
+  enterNextRoundPreparation();
+}
+
+function enterNextRoundPreparation() {
+  const previousWordKey = appState.practice.activeQuestion?.wordKey ?? null;
+  const previousRoundSize = appState.rounds.current?.requestedSize ??
+    appState.rounds.lastCompletedSummary?.totalWords ??
+    getSelectedRoundSize();
+  const eligibleWordKeys = getEligibleWordKeys(report.index).filter(
+    (wordKey) => getLearningRecord(appState.learning, wordKey).status !== LEARNING_STATUSES.REMEMBERED
+  );
+  const wordKey = selectPracticeWordKey({
+    mode: PRACTICE_MODES.RANDOM,
+    eligibleWordKeys,
+    learning: appState.learning,
+    reviewQueue: appState.practice.reviewQueue,
+    attemptCount: appState.practice.freeAttemptCount,
+    excludeWordKey: previousWordKey
+  });
+  const question = wordKey ? createQuestion(report.index, { wordKey }) : null;
   appState = {
     ...appState,
     practice: {
       ...appState.practice,
-      activeQuestion: null
+      mode: PRACTICE_MODES.RANDOM,
+      activeQuestion: question ? createActiveQuestion(question) : null,
+      roundPreparation: Boolean(question),
+      roundPreparationSize: question ? previousRoundSize : null,
+      roundPreparationCustom: Boolean(
+        question && !PRESET_ROUND_SIZES.includes(previousRoundSize)
+      )
     },
     rounds: abandonRound(appState.rounds)
   };
-  replaceActiveQuestion();
+  persistState();
   renderActiveQuestion();
+  elements.roundSize.focus();
+}
+
+function openCompletionIntensive() {
+  dismissedCompletionRoundId = appState.rounds.lastCompletedSummary?.roundId ?? null;
+  changeMode(PRACTICE_MODES.INTENSIVE);
+  renderRoundControls();
 }
 
 function renderRoundControls() {
@@ -529,12 +659,16 @@ function renderRoundControls() {
   ).length;
   const isGraded = appState.practice.activeQuestion?.phase === "graded";
 
+  applyPreparedRoundSize();
+
   elements.roundSetup.hidden = Boolean(currentRound);
   elements.roundActive.hidden = !currentRound;
   elements.customRoundSize.min = "5";
   elements.customRoundSize.max = String(availableCount);
   elements.startRound.disabled = availableCount < 5 || isGraded;
-  elements.abandonRound.disabled = isGraded;
+  elements.startNextRound.disabled = availableCount < 5 || isGraded;
+  elements.completionIntensive.disabled = isGraded;
+  elements.abandonRound.disabled = false;
   for (const option of elements.roundSize.options) {
     if (option.value !== "custom") {
       option.disabled = Number(option.value) > availableCount;
@@ -550,13 +684,74 @@ function renderRoundControls() {
 
   if (currentRound) {
     const { masteredCount } = getCurrentRoundCounts();
-    elements.roundProgress.textContent = `本轮已掌握 ${masteredCount}/${currentRound.wordKeys.length} · 答题 ${currentRound.attemptCount} 次`;
+    elements.roundProgress.textContent = `本轮已掌握 ${masteredCount} / 总数 ${currentRound.wordKeys.length} · 答题 ${currentRound.attemptCount} 次`;
   }
 
   const summary = appState.rounds.lastCompletedSummary;
-  elements.roundSummary.hidden = !summary;
-  if (summary) {
-    elements.roundSummary.textContent = `上一轮完成：掌握 ${summary.masteredCount}/${summary.totalWords}，首次答对 ${summary.firstAttemptCorrectCount}`;
+  const showCompletion = !isAbandonConfirmationOpen && shouldShowCompletionModal({
+    summary,
+    currentRound,
+    dismissedRoundId: dismissedCompletionRoundId
+  });
+  elements.completionModal.hidden = !showCompletion;
+  elements.abandonConfirmModal.hidden = !isAbandonConfirmationOpen;
+  const isModalOpen = showCompletion || isAbandonConfirmationOpen;
+  elements.siteHeader.toggleAttribute("inert", isModalOpen);
+  elements.practiceMain.toggleAttribute("inert", isModalOpen);
+  if (isModalOpen) {
+    elements.siteHeader.setAttribute("aria-hidden", "true");
+    elements.practiceMain.setAttribute("aria-hidden", "true");
+  } else {
+    elements.siteHeader.removeAttribute("aria-hidden");
+    elements.practiceMain.removeAttribute("aria-hidden");
+  }
+  document.body.classList.toggle("modal-open", isModalOpen);
+  elements.roundSummary.hidden = true;
+  if (showCompletion) {
+    elements.completionTotal.textContent = String(summary.totalWords);
+    if (!completionWasOpen) {
+      elements.startNextRound.focus();
+    }
+  }
+  completionWasOpen = showCompletion;
+}
+
+function handleRoundSizeChange() {
+  if (appState.practice.roundPreparation) {
+    appState = {
+      ...appState,
+      practice: {
+        ...appState.practice,
+        roundPreparationSize: getSelectedRoundSize(),
+        roundPreparationCustom: elements.roundSize.value === "custom"
+      }
+    };
+    persistState();
+  }
+  renderRoundControls();
+}
+
+function getSelectedRoundSize() {
+  return elements.roundSize.value === "custom"
+    ? Number(elements.customRoundSize.value)
+    : Number(elements.roundSize.value);
+}
+
+function applyPreparedRoundSize() {
+  const size = appState.practice.roundPreparationSize;
+  if (!appState.practice.roundPreparation) {
+    return;
+  }
+  if (appState.practice.roundPreparationCustom) {
+    elements.roundSize.value = "custom";
+    if (Number.isInteger(size) && size >= 5) {
+      elements.customRoundSize.value = String(size);
+    }
+  } else if (PRESET_ROUND_SIZES.includes(size)) {
+    elements.roundSize.value = String(size);
+  } else if (Number.isInteger(size) && size >= 5) {
+    elements.roundSize.value = "custom";
+    elements.customRoundSize.value = String(size);
   }
 }
 
@@ -568,7 +763,8 @@ function renderQuestionRoundStatus() {
     return;
   }
 
-  elements.questionRoundProgress.textContent = `当前轮次进度：已掌握 ${counts.masteredCount} / 总数 ${counts.totalCount}`;
+  elements.questionRoundMastered.textContent = String(counts.masteredCount);
+  elements.questionRoundTotal.textContent = String(counts.totalCount);
   elements.lastRoundWordHint.hidden = counts.remainingCount !== 1;
 }
 
@@ -636,6 +832,7 @@ function showFatalError(message) {
   elements.type.textContent = "数据错误";
   elements.word.textContent = "无法开始练习";
   elements.prompt.textContent = "请先修复阶段 0 检测到的阻断问题。";
+  elements.prompt.classList.remove("prompt-multiple");
   elements.feedback.textContent = message;
   elements.feedback.className = "feedback fatal";
   elements.submit.disabled = true;

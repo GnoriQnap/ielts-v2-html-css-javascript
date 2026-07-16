@@ -20,6 +20,9 @@ export function createDefaultAppState(vocabulary) {
     practice: {
       mode: PRACTICE_MODES.RANDOM,
       activeQuestion: null,
+      roundPreparation: false,
+      roundPreparationSize: null,
+      roundPreparationCustom: false,
       freeAttemptCount: 0,
       reviewQueue: []
     },
@@ -85,6 +88,17 @@ export function normalizeAppState(candidate, context) {
   }
 
   const learning = normalizeLearning(candidate.learning, validWordKeys);
+  const activeQuestion = normalizeActiveQuestion(candidate.practice?.activeQuestion, {
+    validWordKeys,
+    validGroupIds,
+    correctGroupIdsByWordKey
+  });
+  const rounds = normalizeRounds(candidate.rounds, validWordKeys);
+  const roundPreparation = Boolean(
+    candidate.practice?.roundPreparation === true &&
+    activeQuestion &&
+    !rounds.current
+  );
 
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -95,18 +109,21 @@ export function normalizeAppState(candidate, context) {
       mode: Object.values(PRACTICE_MODES).includes(candidate.practice?.mode)
         ? candidate.practice.mode
         : PRACTICE_MODES.RANDOM,
-      activeQuestion: normalizeActiveQuestion(candidate.practice?.activeQuestion, {
-        validWordKeys,
-        validGroupIds,
-        correctGroupIdsByWordKey
-      }),
+      activeQuestion,
+      roundPreparation,
+      roundPreparationSize: roundPreparation
+        ? normalizeRoundPreparationSize(candidate.practice?.roundPreparationSize)
+        : null,
+      roundPreparationCustom: Boolean(
+        roundPreparation && candidate.practice?.roundPreparationCustom === true
+      ),
       freeAttemptCount: normalizeCount(candidate.practice?.freeAttemptCount),
       reviewQueue: normalizeReviewQueue(candidate.practice?.reviewQueue, {
         validWordKeys,
         learning
       })
     },
-    rounds: normalizeRounds(candidate.rounds, validWordKeys)
+    rounds
   };
 }
 
@@ -222,6 +239,10 @@ function normalizeGroupIds(candidate, validGroupIds) {
 
 function normalizeCount(value) {
   return Number.isInteger(value) && value >= 0 ? value : 0;
+}
+
+function normalizeRoundPreparationSize(value) {
+  return Number.isInteger(value) && value >= 5 ? value : null;
 }
 
 function sameSet(left, right) {
