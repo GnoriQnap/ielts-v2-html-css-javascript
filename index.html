@@ -3,44 +3,39 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="IELTS 同义替换练习词库诊断">
-    <title>IELTS 同义替换练习 · 数据诊断</title>
+    <meta name="description" content="IELTS 英语词汇语义分类练习">
+    <title>IELTS 同义替换练习</title>
     <link rel="stylesheet" href="./css/base.css">
   </head>
   <body>
-    <main class="diagnostic-shell">
-      <header class="page-header">
+    <main class="practice-shell">
+      <header class="site-header">
         <div>
-          <p class="eyebrow">阶段 0 · 项目初始化与数据验证</p>
+          <p class="eyebrow">阶段 1 · 基础答题 MVP</p>
           <h1>IELTS 同义替换练习</h1>
-          <p class="subtitle">当前页面只验证词库结构与多分类索引，暂不提供答题功能。</p>
         </div>
-        <span id="validation-badge" class="status-badge">正在检查</span>
+        <span class="stage-note">刷新页面将重置当前题</span>
       </header>
 
-      <section aria-labelledby="summary-title">
-        <h2 id="summary-title">词库概览</h2>
-        <div id="summary-grid" class="summary-grid" aria-live="polite"></div>
-      </section>
-
-      <section class="panel" aria-labelledby="issues-title">
-        <div class="section-heading">
-          <h2 id="issues-title">数据问题</h2>
-          <p id="issue-count"></p>
+      <section id="practice-card" class="practice-card" aria-labelledby="word-heading">
+        <div class="question-meta">
+          <span id="question-type" class="question-type">准备题目</span>
         </div>
-        <div id="issues"></div>
-      </section>
+        <h2 id="word-heading" class="word">正在加载…</h2>
+        <p id="question-prompt" class="prompt"></p>
 
-      <section class="panel" aria-labelledby="multi-title">
-        <div class="section-heading">
-          <h2 id="multi-title">多分类词条抽样</h2>
-          <p>用于确认 wordKey → 全部 group_id 索引。</p>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>显示词条</th><th>wordKey</th><th>所属分类</th></tr></thead>
-            <tbody id="multi-word-rows"></tbody>
-          </table>
+        <div
+          id="options"
+          class="options-grid"
+          role="group"
+          aria-label="中文语义分类选项"
+        ></div>
+
+        <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
+
+        <div class="actions">
+          <button id="submit-answer" class="button button-primary" type="button">提交答案</button>
+          <button id="next-question" class="button button-primary" type="button" hidden>下一题</button>
         </div>
       </section>
     </main>
