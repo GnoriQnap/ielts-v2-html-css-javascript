@@ -11,10 +11,10 @@
     <main class="practice-shell">
       <header class="site-header">
         <div>
-          <p class="eyebrow">阶段 1 · 基础答题 MVP</p>
+          <p class="eyebrow">阶段 2 · 学习状态与持久化</p>
           <h1>IELTS 同义替换练习</h1>
         </div>
-        <span class="stage-note">刷新页面将重置当前题</span>
+        <span class="stage-note">当前题和学习记录会自动保存</span>
       </header>
 
       <section id="practice-card" class="practice-card" aria-labelledby="word-heading">
@@ -23,6 +23,10 @@
         </div>
         <h2 id="word-heading" class="word">正在加载…</h2>
         <p id="question-prompt" class="prompt"></p>
+
+        <div class="word-summary" aria-live="polite">
+          <span id="word-status" class="word-status">状态：待学习</span>
+        </div>
 
         <div
           id="options"
@@ -35,6 +39,10 @@
 
         <div class="actions">
           <button id="submit-answer" class="button button-primary" type="button">提交答案</button>
+          <div id="decision-actions" class="decision-actions" hidden>
+            <button id="mark-review" class="button button-secondary" type="button">加入待强化</button>
+            <button id="mark-remembered" class="button button-primary" type="button">加入已记忆</button>
+          </div>
           <button id="next-question" class="button button-primary" type="button" hidden>下一题</button>
         </div>
       </section>
