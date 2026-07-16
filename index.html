@@ -11,10 +11,13 @@
     <main class="practice-shell">
       <header class="site-header">
         <div>
-          <p class="eyebrow">阶段 2 · 学习状态与持久化</p>
+          <p class="eyebrow">阶段 3 · 复习调度与强化模式</p>
           <h1>IELTS 同义替换练习</h1>
         </div>
-        <span class="stage-note">当前题和学习记录会自动保存</span>
+        <div class="mode-switch" role="group" aria-label="练习模式">
+          <button id="mode-random" class="mode-button" type="button" aria-pressed="true">随机模式</button>
+          <button id="mode-intensive" class="mode-button" type="button" aria-pressed="false">强化模式</button>
+        </div>
       </header>
 
       <section id="practice-card" class="practice-card" aria-labelledby="word-heading">
@@ -34,6 +37,8 @@
           role="group"
           aria-label="中文语义分类选项"
         ></div>
+
+        <p id="empty-state" class="empty-state" hidden>切换回随机模式可继续自由练习。</p>
 
         <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
 

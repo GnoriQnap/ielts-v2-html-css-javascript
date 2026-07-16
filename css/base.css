@@ -30,6 +30,26 @@ h1, h2, p { margin-top: 0; }
 h1 { margin-bottom: 0; font-size: clamp(26px, 4vw, 36px); }
 .eyebrow { margin-bottom: 7px; color: #159a5b; font-weight: 700; }
 .stage-note { color: #64748b; font-size: 14px; }
+.mode-switch {
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid #dce2e8;
+  border-radius: 9px;
+  background: #fff;
+}
+.mode-button {
+  min-height: 38px;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #526175;
+  cursor: pointer;
+  font-weight: 700;
+}
+.mode-button[aria-pressed="true"] { background: #e8f8ef; color: #087a43; }
+.mode-button:disabled { cursor: not-allowed; opacity: 0.55; }
 
 .practice-card {
   padding: 34px clamp(20px, 5vw, 58px) 38px;
@@ -150,6 +170,7 @@ h1 { margin-bottom: 0; font-size: clamp(26px, 4vw, 36px); }
 .feedback.success { color: #0a874a; }
 .feedback.error { color: #c43a30; }
 .feedback.fatal { color: #c43a30; }
+.empty-state { margin: 0 0 18px; text-align: center; color: #64748b; }
 
 .actions { display: flex; justify-content: center; min-height: 48px; }
 .decision-actions { display: flex; justify-content: center; gap: 12px; }

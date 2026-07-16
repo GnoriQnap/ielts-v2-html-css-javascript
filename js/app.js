@@ -1,6 +1,10 @@
 import { vocabularyData } from "./data/vocabulary.js";
 import { validateVocabularyData } from "./core/vocabulary-validator.js";
-import { createQuestion, isAnswerCorrect } from "./core/question-engine.js";
+import {
+  createQuestion,
+  getEligibleWordKeys,
+  isAnswerCorrect
+} from "./core/question-engine.js";
 import {
   applyMasteryDecision,
   getLearningRecord,
@@ -8,6 +12,12 @@ import {
   recordAnswer
 } from "./core/learning-service.js";
 import { loadAppState, saveAppState } from "./core/storage.js";
+import {
+  PRACTICE_MODES,
+  removeReviewItem,
+  scheduleReview,
+  selectPracticeWordKey
+} from "./core/review-scheduler.js";
 
 const report = validateVocabularyData(vocabularyData);
 const elements = {
@@ -21,7 +31,10 @@ const elements = {
   decisions: document.querySelector("#decision-actions"),
   markReview: document.querySelector("#mark-review"),
   markRemembered: document.querySelector("#mark-remembered"),
-  next: document.querySelector("#next-question")
+  next: document.querySelector("#next-question"),
+  modeRandom: document.querySelector("#mode-random"),
+  modeIntensive: document.querySelector("#mode-intensive"),
+  empty: document.querySelector("#empty-state")
 };
 
 let appState = null;
@@ -31,6 +44,8 @@ elements.submit.addEventListener("click", submitAnswer);
 elements.markReview.addEventListener("click", () => chooseMasteryStatus(LEARNING_STATUSES.REVIEW));
 elements.markRemembered.addEventListener("click", () => chooseMasteryStatus(LEARNING_STATUSES.REMEMBERED));
 elements.next.addEventListener("click", showNextQuestion);
+elements.modeRandom.addEventListener("click", () => changeMode(PRACTICE_MODES.RANDOM));
+elements.modeIntensive.addEventListener("click", () => changeMode(PRACTICE_MODES.INTENSIVE));
 
 if (report.isValid) {
   appState = loadAppState({
@@ -40,7 +55,7 @@ if (report.isValid) {
     correctGroupIdsByWordKey: report.index.groupIdsByWordKey
   });
 
-  if (!appState.practice.activeQuestion) {
+  if (!isActiveQuestionAllowedInMode()) {
     replaceActiveQuestion();
   } else if (
     appState.practice.activeQuestion.phase === "graded" &&
@@ -61,19 +76,27 @@ function showNextQuestion() {
 
 function replaceActiveQuestion() {
   const previousWordKey = appState.practice.activeQuestion?.wordKey ?? null;
-  const question = createQuestion(report.index, { excludeWordKey: previousWordKey });
+  const wordKey = selectPracticeWordKey({
+    mode: appState.practice.mode,
+    eligibleWordKeys: getEligibleWordKeys(report.index),
+    learning: appState.learning,
+    reviewQueue: appState.practice.reviewQueue,
+    attemptCount: appState.practice.freeAttemptCount,
+    excludeWordKey: previousWordKey
+  });
+  const question = wordKey ? createQuestion(report.index, { wordKey }) : null;
   appState = {
     ...appState,
     practice: {
       ...appState.practice,
-      activeQuestion: {
+      activeQuestion: question ? {
         wordKey: question.wordKey,
         optionGroupIds: question.options.map((option) => option.groupId),
         correctGroupIds: [...question.correctGroupIds],
         selectedGroupIds: [],
         phase: "answering",
         result: null
-      }
+      } : null
     }
   };
   persistState();
@@ -81,6 +104,13 @@ function replaceActiveQuestion() {
 
 function renderActiveQuestion() {
   const activeQuestion = appState.practice.activeQuestion;
+  renderModeControls(activeQuestion);
+  if (!activeQuestion) {
+    renderEmptyState();
+    return;
+  }
+  elements.empty.hidden = true;
+  elements.options.hidden = false;
   const isMultiple = activeQuestion.correctGroupIds.length > 1;
   const record = getLearningRecord(appState.learning, activeQuestion.wordKey);
 
@@ -216,12 +246,22 @@ function submitAnswer() {
     return;
   }
 
+  const nextAttemptCount = appState.practice.freeAttemptCount + 1;
+  const nextReviewQueue = answerResult.activeQuestion.result.isCorrect
+    ? appState.practice.reviewQueue
+    : scheduleReview(
+      appState.practice.reviewQueue,
+      activeQuestion.wordKey,
+      nextAttemptCount
+    );
   appState = {
     ...appState,
     learning: answerResult.learning,
     practice: {
       ...appState.practice,
-      activeQuestion: answerResult.activeQuestion
+      activeQuestion: answerResult.activeQuestion,
+      freeAttemptCount: nextAttemptCount,
+      reviewQueue: nextReviewQueue
     }
   };
   persistState();
@@ -238,16 +278,81 @@ function chooseMasteryStatus(status) {
     return;
   }
 
+  const nextReviewQueue = status === LEARNING_STATUSES.REVIEW
+    ? scheduleReview(
+      appState.practice.reviewQueue,
+      appState.practice.activeQuestion.wordKey,
+      appState.practice.freeAttemptCount
+    )
+    : removeReviewItem(
+      appState.practice.reviewQueue,
+      appState.practice.activeQuestion.wordKey
+    );
   appState = {
     ...appState,
     learning: decision.learning,
     practice: {
       ...appState.practice,
-      activeQuestion: decision.activeQuestion
+      activeQuestion: decision.activeQuestion,
+      reviewQueue: nextReviewQueue
     }
   };
   replaceActiveQuestion();
   renderActiveQuestion();
+}
+
+function changeMode(mode) {
+  if (
+    appState.practice.mode === mode ||
+    appState.practice.activeQuestion?.phase === "graded"
+  ) {
+    return;
+  }
+
+  appState = {
+    ...appState,
+    practice: {
+      ...appState.practice,
+      mode
+    }
+  };
+  replaceActiveQuestion();
+  renderActiveQuestion();
+}
+
+function isActiveQuestionAllowedInMode() {
+  const activeQuestion = appState.practice.activeQuestion;
+  if (!activeQuestion) {
+    return false;
+  }
+  return (
+    appState.practice.mode !== PRACTICE_MODES.INTENSIVE ||
+    getLearningRecord(appState.learning, activeQuestion.wordKey).status === LEARNING_STATUSES.REVIEW
+  );
+}
+
+function renderModeControls(activeQuestion) {
+  const isRandom = appState.practice.mode === PRACTICE_MODES.RANDOM;
+  elements.modeRandom.setAttribute("aria-pressed", String(isRandom));
+  elements.modeIntensive.setAttribute("aria-pressed", String(!isRandom));
+  const isDecisionPending = activeQuestion?.phase === "graded";
+  elements.modeRandom.disabled = isDecisionPending;
+  elements.modeIntensive.disabled = isDecisionPending;
+}
+
+function renderEmptyState() {
+  elements.type.textContent = "强化模式";
+  elements.word.textContent = "暂无待强化词";
+  elements.prompt.textContent = "答错或主动加入待强化后，可在这里集中练习。";
+  elements.wordStatus.textContent = "";
+  elements.wordStatus.removeAttribute("data-status");
+  elements.options.replaceChildren();
+  elements.options.hidden = true;
+  elements.empty.hidden = false;
+  elements.feedback.textContent = "";
+  elements.submit.hidden = true;
+  elements.decisions.hidden = true;
+  elements.next.hidden = true;
 }
 
 function persistState() {

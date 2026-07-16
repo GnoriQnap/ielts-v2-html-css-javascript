@@ -54,6 +54,16 @@ function createPersistedState() {
       decision: null
     }
   };
+  state.practice.mode = "intensive";
+  state.practice.freeAttemptCount = 12;
+  state.practice.reviewQueue = [{
+    wordKey: "critical",
+    scope: "free",
+    roundId: null,
+    scheduledAtAttempt: 3,
+    dueAfterAttempt: 9,
+    delay: 6
+  }];
   return state;
 }
 
@@ -70,6 +80,9 @@ test("state saves and restores learning and the active question", () => {
   assert.deepEqual(loaded.practice.activeQuestion.selectedGroupIds, [8, 7]);
   assert.equal(loaded.practice.activeQuestion.phase, "graded");
   assert.equal(loaded.practice.activeQuestion.result.isCorrect, true);
+  assert.equal(loaded.practice.mode, "intensive");
+  assert.equal(loaded.practice.freeAttemptCount, 12);
+  assert.equal(loaded.practice.reviewQueue.length, 1);
 });
 
 test("missing fields recover to safe defaults", () => {
@@ -79,6 +92,9 @@ test("missing fields recover to safe defaults", () => {
 
   assert.deepEqual(loaded.learning, { byWordKey: {} });
   assert.equal(loaded.practice.activeQuestion, null);
+  assert.equal(loaded.practice.mode, "random");
+  assert.equal(loaded.practice.freeAttemptCount, 0);
+  assert.deepEqual(loaded.practice.reviewQueue, []);
   assert.deepEqual(loaded.vocabulary, vocabulary);
 });
 
@@ -119,4 +135,40 @@ test("damaged JSON returns a usable default state", () => {
   assert.deepEqual(loaded.learning, { byWordKey: {} });
   assert.equal(loaded.practice.activeQuestion, null);
   assert.deepEqual(loaded.vocabulary, vocabulary);
+});
+
+test("invalid review queue fields recover and remembered words are removed", () => {
+  const storage = new MemoryStorage();
+  storage.setItem(STORAGE_KEY, JSON.stringify({
+    vocabulary,
+    learning: {
+      byWordKey: {
+        critical: {
+          status: "remembered",
+          correctCount: 1,
+          errorCount: 0,
+          answerCount: 1,
+          lastAnsweredAt: null
+        }
+      }
+    },
+    practice: {
+      mode: "unknown",
+      freeAttemptCount: -1,
+      activeQuestion: null,
+      reviewQueue: [{
+        wordKey: "critical",
+        scope: "free",
+        roundId: null,
+        scheduledAtAttempt: 1,
+        dueAfterAttempt: 6,
+        delay: 5
+      }]
+    }
+  }));
+  const loaded = loadAppState({ storage, ...context });
+
+  assert.equal(loaded.practice.mode, "random");
+  assert.equal(loaded.practice.freeAttemptCount, 0);
+  assert.deepEqual(loaded.practice.reviewQueue, []);
 });

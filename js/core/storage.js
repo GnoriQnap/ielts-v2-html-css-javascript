@@ -1,4 +1,8 @@
 import { createDefaultLearningRecord, LEARNING_STATUSES } from "./learning-service.js";
+import {
+  normalizeReviewQueue,
+  PRACTICE_MODES
+} from "./review-scheduler.js";
 
 export const STORAGE_KEY = "ielts_synonym_trainer_state";
 export const SCHEMA_VERSION = 1;
@@ -12,7 +16,10 @@ export function createDefaultAppState(vocabulary) {
       byWordKey: {}
     },
     practice: {
-      activeQuestion: null
+      mode: PRACTICE_MODES.RANDOM,
+      activeQuestion: null,
+      freeAttemptCount: 0,
+      reviewQueue: []
     }
   };
 }
@@ -71,16 +78,26 @@ export function normalizeAppState(candidate, context) {
     return defaultState;
   }
 
+  const learning = normalizeLearning(candidate.learning, validWordKeys);
+
   return {
     schemaVersion: SCHEMA_VERSION,
     savedAt: typeof candidate.savedAt === "string" ? candidate.savedAt : null,
     vocabulary: normalizeVocabulary(candidate.vocabulary, defaultState.vocabulary),
-    learning: normalizeLearning(candidate.learning, validWordKeys),
+    learning,
     practice: {
+      mode: Object.values(PRACTICE_MODES).includes(candidate.practice?.mode)
+        ? candidate.practice.mode
+        : PRACTICE_MODES.RANDOM,
       activeQuestion: normalizeActiveQuestion(candidate.practice?.activeQuestion, {
         validWordKeys,
         validGroupIds,
         correctGroupIdsByWordKey
+      }),
+      freeAttemptCount: normalizeCount(candidate.practice?.freeAttemptCount),
+      reviewQueue: normalizeReviewQueue(candidate.practice?.reviewQueue, {
+        validWordKeys,
+        learning
       })
     }
   };
