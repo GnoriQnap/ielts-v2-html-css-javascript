@@ -124,3 +124,20 @@ test("normalization removes invalid, missing, remembered, and duplicate queue en
   assert.equal(result[0].wordKey, "review-word");
   assert.equal(result[0].scheduledAtAttempt, 8);
 });
+
+test("round-scoped scheduling persists its round id without duplicating the word", () => {
+  const freeQueue = scheduleReview([], "review-word", 2, { random: () => 0 });
+  const roundQueue = scheduleReview(freeQueue, "review-word", 4, {
+    random: () => 0,
+    scope: "round",
+    roundId: "round-1"
+  });
+  const normalized = normalizeReviewQueue(roundQueue, {
+    validWordKeys: new Set(["review-word"]),
+    learning: learningWith({ "review-word": "review" })
+  });
+
+  assert.equal(normalized.length, 1);
+  assert.equal(normalized[0].scope, "round");
+  assert.equal(normalized[0].roundId, "round-1");
+});

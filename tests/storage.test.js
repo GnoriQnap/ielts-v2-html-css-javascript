@@ -14,7 +14,7 @@ const vocabulary = {
 };
 const context = {
   vocabulary,
-  validWordKeys: new Set(["critical"]),
+  validWordKeys: new Set(["critical", "word-2", "word-3", "word-4", "word-5"]),
   validGroupIds: new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
   correctGroupIdsByWordKey: new Map([["critical", new Set([7, 8])]])
 };
@@ -64,6 +64,27 @@ function createPersistedState() {
     dueAfterAttempt: 9,
     delay: 6
   }];
+  const roundWordKeys = ["critical", "word-2", "word-3", "word-4", "word-5"];
+  state.rounds.current = {
+    id: "round-persisted",
+    createdAt: "2026-07-16T07:00:00.000Z",
+    requestedSize: 5,
+    wordKeys: roundWordKeys,
+    attemptCount: 2,
+    correctAttemptCount: 1,
+    progressByWord: Object.fromEntries(roundWordKeys.map((wordKey) => [wordKey, {
+      hasBeenShown: wordKey === "critical",
+      firstAttemptCorrect: wordKey === "critical" ? true : null,
+      firstDecision: null,
+      everWrong: false,
+      everChoseReview: false,
+      masteredViaExternalChange: false,
+      mastered: false,
+      attemptCount: wordKey === "critical" ? 1 : 0,
+      correctCount: wordKey === "critical" ? 1 : 0,
+      errorCount: 0
+    }]))
+  };
   return state;
 }
 
@@ -83,6 +104,9 @@ test("state saves and restores learning and the active question", () => {
   assert.equal(loaded.practice.mode, "intensive");
   assert.equal(loaded.practice.freeAttemptCount, 12);
   assert.equal(loaded.practice.reviewQueue.length, 1);
+  assert.equal(loaded.rounds.current.id, "round-persisted");
+  assert.equal(loaded.rounds.current.wordKeys.length, 5);
+  assert.equal(loaded.rounds.current.progressByWord.critical.hasBeenShown, true);
 });
 
 test("missing fields recover to safe defaults", () => {
@@ -95,6 +119,7 @@ test("missing fields recover to safe defaults", () => {
   assert.equal(loaded.practice.mode, "random");
   assert.equal(loaded.practice.freeAttemptCount, 0);
   assert.deepEqual(loaded.practice.reviewQueue, []);
+  assert.deepEqual(loaded.rounds, { current: null, lastCompletedSummary: null });
   assert.deepEqual(loaded.vocabulary, vocabulary);
 });
 
@@ -122,7 +147,10 @@ test("illegal learning status and counts recover independently", () => {
     correctCount: 0,
     errorCount: 0,
     answerCount: 5,
-    lastAnsweredAt: null
+    lastAnsweredAt: null,
+    reviewSince: null,
+    enteredRoundIds: [],
+    roundsEntered: 0
   });
 });
 

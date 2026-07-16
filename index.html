@@ -11,7 +11,7 @@
     <main class="practice-shell">
       <header class="site-header">
         <div>
-          <p class="eyebrow">阶段 3 · 复习调度与强化模式</p>
+          <p class="eyebrow">阶段 4 · 固定学习轮次</p>
           <h1>IELTS 同义替换练习</h1>
         </div>
         <div class="mode-switch" role="group" aria-label="练习模式">
@@ -20,14 +20,38 @@
         </div>
       </header>
 
+      <section class="round-panel" aria-label="学习轮次">
+        <div id="round-setup" class="round-setup">
+          <label for="round-size">新一轮词条数</label>
+          <select id="round-size">
+            <option value="20">20</option>
+            <option value="30" selected>30</option>
+            <option value="50">50</option>
+            <option value="custom">自定义</option>
+          </select>
+          <input id="custom-round-size" type="number" min="5" inputmode="numeric" value="30" aria-label="自定义轮次词条数" hidden>
+          <button id="start-round" class="button button-primary button-compact" type="button">开始新一轮</button>
+        </div>
+        <div id="round-active" class="round-active" hidden>
+          <strong id="round-progress">本轮已掌握 0/0</strong>
+          <button id="abandon-round" class="button button-quiet button-compact" type="button">放弃本轮</button>
+        </div>
+        <p id="round-summary" class="round-summary" aria-live="polite" hidden></p>
+      </section>
+
       <section id="practice-card" class="practice-card" aria-labelledby="word-heading">
-        <div class="question-meta">
+        <div class="question-meta" hidden>
           <span id="question-type" class="question-type">准备题目</span>
         </div>
         <h2 id="word-heading" class="word">正在加载…</h2>
         <p id="question-prompt" class="prompt"></p>
 
-        <div class="word-summary" aria-live="polite">
+        <div id="question-round-status" class="question-round-status" aria-live="polite" hidden>
+          <p id="question-round-progress">当前轮次进度：已掌握 0 / 总数 0</p>
+          <p id="last-round-word-hint" class="last-round-word-hint" hidden>本轮仅剩 1 个词，需要掌握后才能完成本轮</p>
+        </div>
+
+        <div class="word-summary" aria-live="polite" hidden>
           <span id="word-status" class="word-status">状态：待学习</span>
         </div>
 

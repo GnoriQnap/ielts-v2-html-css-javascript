@@ -3,6 +3,7 @@ import {
   normalizeReviewQueue,
   PRACTICE_MODES
 } from "./review-scheduler.js";
+import { normalizeRounds } from "./round-service.js";
 
 export const STORAGE_KEY = "ielts_synonym_trainer_state";
 export const SCHEMA_VERSION = 1;
@@ -20,6 +21,10 @@ export function createDefaultAppState(vocabulary) {
       activeQuestion: null,
       freeAttemptCount: 0,
       reviewQueue: []
+    },
+    rounds: {
+      current: null,
+      lastCompletedSummary: null
     }
   };
 }
@@ -99,7 +104,8 @@ export function normalizeAppState(candidate, context) {
         validWordKeys,
         learning
       })
-    }
+    },
+    rounds: normalizeRounds(candidate.rounds, validWordKeys)
   };
 }
 
@@ -123,6 +129,9 @@ function normalizeLearning(candidate, validWordKeys) {
       continue;
     }
     const defaults = createDefaultLearningRecord();
+    const enteredRoundIds = Array.isArray(record.enteredRoundIds)
+      ? [...new Set(record.enteredRoundIds.filter((roundId) => typeof roundId === "string" && roundId.length > 0))]
+      : [];
     byWordKey[wordKey] = {
       status: Object.values(LEARNING_STATUSES).includes(record.status)
         ? record.status
@@ -132,7 +141,10 @@ function normalizeLearning(candidate, validWordKeys) {
       answerCount: normalizeCount(record.answerCount),
       lastAnsweredAt: typeof record.lastAnsweredAt === "string"
         ? record.lastAnsweredAt
-        : null
+        : null,
+      reviewSince: typeof record.reviewSince === "string" ? record.reviewSince : null,
+      enteredRoundIds,
+      roundsEntered: enteredRoundIds.length
     };
   }
 

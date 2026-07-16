@@ -10,12 +10,18 @@ export function createDefaultLearningRecord() {
     correctCount: 0,
     errorCount: 0,
     answerCount: 0,
-    lastAnsweredAt: null
+    lastAnsweredAt: null,
+    reviewSince: null,
+    enteredRoundIds: [],
+    roundsEntered: 0
   };
 }
 
 export function getLearningRecord(learning, wordKey) {
-  return learning?.byWordKey?.[wordKey] ?? createDefaultLearningRecord();
+  return {
+    ...createDefaultLearningRecord(),
+    ...(learning?.byWordKey?.[wordKey] ?? {})
+  };
 }
 
 export function recordAnswer({ learning, activeQuestion, isCorrect, answeredAt }) {
@@ -30,7 +36,12 @@ export function recordAnswer({ learning, activeQuestion, isCorrect, answeredAt }
     correctCount: previousRecord.correctCount + (isCorrect ? 1 : 0),
     errorCount: previousRecord.errorCount + (isCorrect ? 0 : 1),
     answerCount: previousRecord.answerCount + 1,
-    lastAnsweredAt: answeredAt
+    lastAnsweredAt: answeredAt,
+    reviewSince: isCorrect
+      ? previousRecord.reviewSince
+      : previousRecord.status === LEARNING_STATUSES.REVIEW
+        ? previousRecord.reviewSince ?? answeredAt
+        : answeredAt
   };
   const nextLearning = {
     ...learning,
@@ -56,7 +67,7 @@ export function recordAnswer({ learning, activeQuestion, isCorrect, answeredAt }
   };
 }
 
-export function applyMasteryDecision({ learning, activeQuestion, status }) {
+export function applyMasteryDecision({ learning, activeQuestion, status, decidedAt = new Date().toISOString() }) {
   if (
     !activeQuestion ||
     activeQuestion.phase !== "graded" ||
@@ -74,7 +85,12 @@ export function applyMasteryDecision({ learning, activeQuestion, status }) {
       ...learning.byWordKey,
       [activeQuestion.wordKey]: {
         ...previousRecord,
-        status
+        status,
+        reviewSince: status === LEARNING_STATUSES.REVIEW
+          ? previousRecord.status === LEARNING_STATUSES.REVIEW
+            ? previousRecord.reviewSince ?? decidedAt
+            : decidedAt
+          : null
       }
     }
   };

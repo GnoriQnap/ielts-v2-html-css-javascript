@@ -6,11 +6,16 @@ export const PRACTICE_MODES = Object.freeze({
 });
 
 export const REVIEW_SCOPE = "free";
+export const ROUND_REVIEW_SCOPE = "round";
 export const MIN_REVIEW_DELAY = 5;
 export const MAX_REVIEW_DELAY = 7;
 
 export function scheduleReview(reviewQueue, wordKey, attemptCount, options = {}) {
-  const { random = Math.random } = options;
+  const {
+    random = Math.random,
+    scope = REVIEW_SCOPE,
+    roundId = null
+  } = options;
   const queue = Array.isArray(reviewQueue) ? reviewQueue : [];
 
   if (typeof wordKey !== "string" || wordKey.length === 0) {
@@ -19,12 +24,19 @@ export function scheduleReview(reviewQueue, wordKey, attemptCount, options = {})
   if (!Number.isInteger(attemptCount) || attemptCount < 0) {
     throw new RangeError("attemptCount 必须是非负整数。");
   }
+  if (
+    ![REVIEW_SCOPE, ROUND_REVIEW_SCOPE].includes(scope) ||
+    (scope === REVIEW_SCOPE && roundId !== null) ||
+    (scope === ROUND_REVIEW_SCOPE && (typeof roundId !== "string" || roundId.length === 0))
+  ) {
+    throw new RangeError("复习调度的 scope 和 roundId 不匹配。");
+  }
 
   const delay = randomDelay(random);
   const nextItem = {
     wordKey,
-    scope: REVIEW_SCOPE,
-    roundId: null,
+    scope,
+    roundId,
     scheduledAtAttempt: attemptCount,
     dueAfterAttempt: attemptCount + delay,
     delay
@@ -73,8 +85,8 @@ export function normalizeReviewQueue(reviewQueue, options = {}) {
     }
     byWordKey.set(item.wordKey, {
       wordKey: item.wordKey,
-      scope: REVIEW_SCOPE,
-      roundId: null,
+      scope: item.scope,
+      roundId: item.roundId,
       scheduledAtAttempt: item.scheduledAtAttempt,
       dueAfterAttempt: item.dueAfterAttempt,
       delay: item.delay
@@ -139,8 +151,11 @@ function isValidReviewItem(item) {
     typeof item === "object" &&
     typeof item.wordKey === "string" &&
     item.wordKey.length > 0 &&
-    item.scope === REVIEW_SCOPE &&
-    item.roundId === null &&
+    [REVIEW_SCOPE, ROUND_REVIEW_SCOPE].includes(item.scope) &&
+    (
+      (item.scope === REVIEW_SCOPE && item.roundId === null) ||
+      (item.scope === ROUND_REVIEW_SCOPE && typeof item.roundId === "string" && item.roundId.length > 0)
+    ) &&
     Number.isInteger(item.scheduledAtAttempt) &&
     item.scheduledAtAttempt >= 0 &&
     Number.isInteger(item.delay) &&
