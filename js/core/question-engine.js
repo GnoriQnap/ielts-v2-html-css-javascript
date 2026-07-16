@@ -1,4 +1,4 @@
-const DEFAULT_OPTION_COUNT = 10;
+export const DEFAULT_OPTION_COUNT = 6;
 
 export function getEligibleWordKeys(index, optionCount = DEFAULT_OPTION_COUNT) {
   assertUsableIndex(index, optionCount);

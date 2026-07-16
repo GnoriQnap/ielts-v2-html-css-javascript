@@ -34,9 +34,9 @@ test("validator reports invalid root data safely", () => {
   assert.equal(report.summary.uniqueWordCount, 0);
 });
 
-test("validator blocks a word with more than ten correct categories", () => {
+test("validator blocks a word with more than six correct categories", () => {
   const data = {
-    vocabulary_list: Array.from({ length: 11 }, (_, index) => ({
+    vocabulary_list: Array.from({ length: 7 }, (_, index) => ({
       group_id: index + 1,
       category: `分类${index + 1}`,
       words: ["shared"]
@@ -48,7 +48,7 @@ test("validator blocks a word with more than ten correct categories", () => {
   assert.ok(report.errors.some((item) => item.code === "TOO_MANY_CORRECT_GROUPS"));
 });
 
-test("validator blocks vocabularies with fewer than ten categories", () => {
+test("validator blocks vocabularies with fewer than six categories", () => {
   const report = validateVocabularyData({
     vocabulary_list: [{ group_id: 1, category: "分类一", words: ["word"] }]
   });

@@ -1,5 +1,6 @@
 import { normalizeCategoryName, normalizeWordKey } from "./normalization.js";
 import { createVocabularyIndex } from "./vocabulary-index.js";
+import { DEFAULT_OPTION_COUNT } from "./question-engine.js";
 
 function issue(code, message, context = {}) {
   return { code, message, context };
@@ -96,10 +97,10 @@ export function validateVocabularyData(data) {
     if (groupIds.length > 1) {
       multiCategoryWords.push({ wordKey, displayText: index.displayByWordKey.get(wordKey), groupIds });
     }
-    if (groupIds.length > 10) {
+    if (groupIds.length > DEFAULT_OPTION_COUNT) {
       const detail = { wordKey, displayText: index.displayByWordKey.get(wordKey), groupIds };
       overTenCategoryWords.push(detail);
-      errors.push(issue("TOO_MANY_CORRECT_GROUPS", `词条“${detail.displayText}”属于 ${groupIds.length} 个分类，无法生成 10 个选项。`, detail));
+      errors.push(issue("TOO_MANY_CORRECT_GROUPS", `词条“${detail.displayText}”属于 ${groupIds.length} 个分类，无法生成 ${DEFAULT_OPTION_COUNT} 个选项。`, detail));
     }
     if (variants.length > 1) {
       const detail = { wordKey, variants };
@@ -108,8 +109,8 @@ export function validateVocabularyData(data) {
     }
   }
 
-  if (index.groupById.size < 10) {
-    errors.push(issue("INSUFFICIENT_GROUPS", `有效分类只有 ${index.groupById.size} 个，无法生成 10 个选项。`, { validGroupCount: index.groupById.size }));
+  if (index.groupById.size < DEFAULT_OPTION_COUNT) {
+    errors.push(issue("INSUFFICIENT_GROUPS", `有效分类只有 ${index.groupById.size} 个，无法生成 ${DEFAULT_OPTION_COUNT} 个选项。`, { validGroupCount: index.groupById.size }));
   }
 
   return {

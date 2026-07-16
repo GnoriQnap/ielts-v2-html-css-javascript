@@ -26,13 +26,18 @@ test("multi-category word produces every correct group id", () => {
   assert.deepEqual(new Set(question.correctGroupIds), new Set([25, 34, 52]));
 });
 
-test("question has exactly ten distinct options containing every correct group", () => {
+test("createQuestion returns six options by default", () => {
   const question = createQuestion(index, { wordKey: "critical" });
   const optionGroupIds = question.options.map((option) => option.groupId);
 
-  assert.equal(optionGroupIds.length, 10);
-  assert.equal(new Set(optionGroupIds).size, 10);
+  assert.equal(optionGroupIds.length, 6);
+  assert.equal(new Set(optionGroupIds).size, 6);
   assert.ok(question.correctGroupIds.every((groupId) => optionGroupIds.includes(groupId)));
+});
+
+test("optionCount controls the number of generated options", () => {
+  assert.equal(createQuestion(index, { wordKey: "critical", optionCount: 6 }).options.length, 6);
+  assert.equal(createQuestion(index, { wordKey: "critical", optionCount: 7 }).options.length, 7);
 });
 
 test("single-choice answer is judged by group id", () => {
@@ -66,18 +71,18 @@ test("all 57 multi-category words produce legal questions", () => {
     const question = createQuestion(index, { wordKey });
     const optionGroupIds = question.options.map((option) => option.groupId);
     assert.equal(question.type, "multiple", wordKey);
-    assert.equal(optionGroupIds.length, 10, wordKey);
-    assert.equal(new Set(optionGroupIds).size, 10, wordKey);
+    assert.equal(optionGroupIds.length, 6, wordKey);
+    assert.equal(new Set(optionGroupIds).size, 6, wordKey);
     assert.ok(question.correctGroupIds.every((groupId) => optionGroupIds.includes(groupId)), wordKey);
   }
 });
 
-test("one thousand generated questions always have ten distinct options", () => {
+test("one thousand generated questions always have six legal options", () => {
   for (let count = 0; count < 1000; count += 1) {
     const question = createQuestion(index);
     const optionGroupIds = question.options.map((option) => option.groupId);
-    assert.equal(optionGroupIds.length, 10);
-    assert.equal(new Set(optionGroupIds).size, 10);
+    assert.equal(optionGroupIds.length, 6);
+    assert.equal(new Set(optionGroupIds).size, 6);
     assert.ok(question.correctGroupIds.every((groupId) => optionGroupIds.includes(groupId)));
   }
 });

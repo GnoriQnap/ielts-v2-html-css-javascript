@@ -16,7 +16,7 @@ const context = {
   vocabulary,
   validWordKeys: new Set(["critical", "word-2", "word-3", "word-4", "word-5"]),
   validGroupIds: new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
-  correctGroupIdsByWordKey: new Map([["critical", new Set([7, 8])]])
+  correctGroupIdsByWordKey: new Map([["critical", new Set([5, 6])]])
 };
 
 class MemoryStorage {
@@ -44,9 +44,9 @@ function createPersistedState() {
   };
   state.practice.activeQuestion = {
     wordKey: "critical",
-    optionGroupIds: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-    correctGroupIds: [7, 8],
-    selectedGroupIds: [8, 7],
+    optionGroupIds: [1, 2, 3, 4, 5, 6],
+    correctGroupIds: [5, 6],
+    selectedGroupIds: [6, 5],
     phase: "awaitingDecision",
     result: {
       isCorrect: true,
@@ -98,7 +98,7 @@ test("state saves and restores learning and the active question", () => {
 
   assert.equal(saved.savedAt, "2026-07-16T09:00:00.000Z");
   assert.equal(loaded.learning.byWordKey.critical.status, "review");
-  assert.deepEqual(loaded.practice.activeQuestion.selectedGroupIds, [8, 7]);
+  assert.deepEqual(loaded.practice.activeQuestion.selectedGroupIds, [6, 5]);
   assert.equal(loaded.practice.activeQuestion.phase, "graded");
   assert.equal(loaded.practice.activeQuestion.result.isCorrect, true);
   assert.equal(loaded.practice.mode, "intensive");

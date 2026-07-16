@@ -4,6 +4,7 @@ import {
   PRACTICE_MODES
 } from "./review-scheduler.js";
 import { normalizeRounds } from "./round-service.js";
+import { DEFAULT_OPTION_COUNT } from "./question-engine.js";
 
 export const STORAGE_KEY = "ielts_synonym_trainer_state";
 export const SCHEMA_VERSION = 1;
@@ -160,7 +161,7 @@ function normalizeActiveQuestion(candidate, context) {
   const expectedCorrectGroupIds = context.correctGroupIdsByWordKey.get(candidate.wordKey);
   const correctGroupIds = normalizeGroupIds(candidate.correctGroupIds, context.validGroupIds);
   if (
-    optionGroupIds.length !== 10 ||
+    optionGroupIds.length !== DEFAULT_OPTION_COUNT ||
     !expectedCorrectGroupIds ||
     !sameSet(correctGroupIds, expectedCorrectGroupIds) ||
     !correctGroupIds.every((groupId) => optionGroupIds.includes(groupId))
