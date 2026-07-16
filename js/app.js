@@ -27,6 +27,7 @@ import {
   markRoundWordShown,
   recordRoundAnswer
 } from "./core/round-service.js";
+import { createHomeDashboardModel } from "./ui/home-dashboard.js";
 
 const report = validateVocabularyData(vocabularyData);
 const elements = {
@@ -54,7 +55,12 @@ const elements = {
   roundActive: document.querySelector("#round-active"),
   roundProgress: document.querySelector("#round-progress"),
   abandonRound: document.querySelector("#abandon-round"),
-  roundSummary: document.querySelector("#round-summary")
+  roundSummary: document.querySelector("#round-summary"),
+  overallProgressCount: document.querySelector("#overall-progress-count"),
+  overallProgressBar: document.querySelector("#overall-progress-bar"),
+  reviewCountStat: document.querySelector("#review-count-stat"),
+  reviewRanking: document.querySelector("#review-ranking"),
+  reviewRankingEmpty: document.querySelector("#review-ranking-empty")
 };
 
 let appState = null;
@@ -150,6 +156,7 @@ function replaceActiveQuestion() {
 
 function renderActiveQuestion() {
   const activeQuestion = appState.practice.activeQuestion;
+  renderDashboard();
   renderRoundControls();
   renderQuestionRoundStatus();
   renderModeControls(activeQuestion);
@@ -438,11 +445,11 @@ function renderModeControls(activeQuestion) {
 function renderEmptyState() {
   const isRoundIntensive = appState.rounds.current && appState.practice.mode === PRACTICE_MODES.INTENSIVE;
   elements.type.textContent = appState.practice.mode === PRACTICE_MODES.INTENSIVE
-    ? "强化模式"
+    ? "待强化专练"
     : "轮次完成";
   elements.word.textContent = isRoundIntensive ? "本轮暂无待强化词" : "暂无待强化词";
   elements.prompt.textContent = isRoundIntensive
-    ? "切换到随机模式继续本轮学习。"
+    ? "切换到随机练习继续本轮学习。"
     : "答错或主动加入待强化后，可在这里集中练习。";
   elements.wordStatus.textContent = "";
   elements.wordStatus.removeAttribute("data-status");
@@ -579,6 +586,31 @@ function getCurrentRoundCounts() {
     totalCount: currentRound.wordKeys.length,
     remainingCount: currentRound.wordKeys.length - masteredCount
   };
+}
+
+function renderDashboard() {
+  const model = createHomeDashboardModel({
+    allWordKeys: report.index.allWordKeys,
+    learning: appState.learning,
+    currentRound: appState.rounds.current,
+    displayByWordKey: report.index.displayByWordKey
+  });
+  elements.overallProgressCount.textContent = `${model.rememberedCount} / ${model.totalCount}`;
+  elements.overallProgressBar.style.width = `${model.rememberedPercent}%`;
+  elements.reviewCountStat.textContent = String(model.reviewCount);
+
+  elements.reviewRanking.replaceChildren();
+  for (const item of model.topReviewWords) {
+    const row = document.createElement("li");
+    const word = document.createElement("span");
+    const count = document.createElement("strong");
+    word.textContent = item.displayText;
+    count.textContent = `${item.errorCount}次`;
+    row.append(word, count);
+    elements.reviewRanking.append(row);
+  }
+  elements.reviewRankingEmpty.hidden = model.topReviewWords.length > 0;
+  elements.reviewRanking.hidden = model.topReviewWords.length === 0;
 }
 
 function persistState() {

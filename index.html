@@ -8,73 +8,125 @@
     <link rel="stylesheet" href="./css/base.css">
   </head>
   <body>
-    <main class="practice-shell">
-      <header class="site-header">
-        <div>
-          <p class="eyebrow">阶段 4 · 固定学习轮次</p>
-          <h1>IELTS 同义替换练习</h1>
-        </div>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="#practice-card" aria-label="IELTS 同义替换练习首页">
+          <span class="brand-mark" aria-hidden="true">I</span>
+          <span>IELTS同义替换练习</span>
+        </a>
+
+        <nav class="primary-nav" aria-label="主要导航">
+          <a class="nav-link nav-link-current" href="#practice-card">当前学习</a>
+          <a class="nav-link nav-start-round" href="#round-panel">开始新一轮</a>
+          <button class="nav-link" type="button" disabled title="阶段 6 开放">单词本</button>
+          <button class="nav-link" type="button" disabled title="阶段 7 开放">词库管理</button>
+        </nav>
+
         <div class="mode-switch" role="group" aria-label="练习模式">
-          <button id="mode-random" class="mode-button" type="button" aria-pressed="true">随机模式</button>
-          <button id="mode-intensive" class="mode-button" type="button" aria-pressed="false">强化模式</button>
+          <button id="mode-random" class="mode-button" type="button" aria-pressed="true">随机练习</button>
+          <button id="mode-intensive" class="mode-button" type="button" aria-pressed="false">待强化专练</button>
         </div>
-      </header>
+      </div>
+    </header>
 
-      <section class="round-panel" aria-label="学习轮次">
-        <div id="round-setup" class="round-setup">
-          <label for="round-size">新一轮词条数</label>
-          <select id="round-size">
-            <option value="20">20</option>
-            <option value="30" selected>30</option>
-            <option value="50">50</option>
-            <option value="custom">自定义</option>
-          </select>
-          <input id="custom-round-size" type="number" min="5" inputmode="numeric" value="30" aria-label="自定义轮次词条数" hidden>
-          <button id="start-round" class="button button-primary button-compact" type="button">开始新一轮</button>
+    <main class="practice-shell">
+      <div class="workspace-grid">
+        <div class="workspace-primary">
+          <section class="stats-panel" aria-label="总体学习进度">
+            <article class="stat-block stat-overall">
+              <div class="stat-heading">
+                <span>总体学习进度</span>
+                <span id="overall-progress-count" class="stat-progress-count">0 / 0</span>
+              </div>
+              <div class="progress-track" aria-hidden="true">
+                <span id="overall-progress-bar" class="progress-value"></span>
+              </div>
+            </article>
+          </section>
+
+          <section id="round-panel" class="round-panel" aria-label="学习轮次">
+            <div class="round-panel-title">
+              <div>
+                <span class="section-kicker">固定学习批次</span>
+                <strong>学习轮次</strong>
+              </div>
+            </div>
+            <div id="round-setup" class="round-setup">
+              <label for="round-size">本轮词条数</label>
+              <select id="round-size">
+                <option value="20">20</option>
+                <option value="30" selected>30</option>
+                <option value="50">50</option>
+                <option value="custom">自定义</option>
+              </select>
+              <input id="custom-round-size" type="number" min="5" inputmode="numeric" value="30" aria-label="自定义轮次词条数" hidden>
+              <button id="start-round" class="button button-primary button-compact" type="button">开始新一轮</button>
+            </div>
+            <div id="round-active" class="round-active" hidden>
+              <strong id="round-progress">本轮已掌握 0/0</strong>
+              <button id="abandon-round" class="button button-quiet button-compact" type="button">放弃本轮</button>
+            </div>
+            <p id="round-summary" class="round-summary" aria-live="polite" hidden></p>
+          </section>
+
+          <section id="practice-card" class="practice-card" aria-labelledby="word-heading">
+            <div class="question-meta" hidden>
+              <span id="question-type" class="question-type">准备题目</span>
+            </div>
+            <h1 id="word-heading" class="word">正在加载…</h1>
+            <p id="question-prompt" class="prompt"></p>
+
+            <div class="question-utility-row">
+              <div id="question-round-status" class="question-round-status" aria-live="polite" hidden>
+                <p id="question-round-progress">当前轮次进度：已掌握 0 / 总数 0</p>
+                <p id="last-round-word-hint" class="last-round-word-hint" hidden>本轮仅剩 1 个词，需要掌握后才能完成本轮</p>
+              </div>
+            </div>
+
+            <div class="word-summary" aria-live="polite" hidden>
+              <span id="word-status" class="word-status">状态：待学习</span>
+            </div>
+
+            <div
+              id="options"
+              class="options-grid"
+              role="group"
+              aria-label="中文语义分类选项"
+            ></div>
+
+            <p id="empty-state" class="empty-state" hidden>切换回随机练习可继续自由练习。</p>
+
+            <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
+
+            <div class="actions">
+              <button id="submit-answer" class="button button-primary" type="button">提交答案</button>
+              <div id="decision-actions" class="decision-actions" hidden>
+                <button id="mark-review" class="button button-secondary" type="button">加入待强化</button>
+                <button id="mark-remembered" class="button button-primary" type="button">加入已记忆</button>
+              </div>
+              <button id="next-question" class="button button-primary" type="button" hidden>下一题</button>
+            </div>
+          </section>
         </div>
-        <div id="round-active" class="round-active" hidden>
-          <strong id="round-progress">本轮已掌握 0/0</strong>
-          <button id="abandon-round" class="button button-quiet button-compact" type="button">放弃本轮</button>
-        </div>
-        <p id="round-summary" class="round-summary" aria-live="polite" hidden></p>
-      </section>
 
-      <section id="practice-card" class="practice-card" aria-labelledby="word-heading">
-        <div class="question-meta" hidden>
-          <span id="question-type" class="question-type">准备题目</span>
-        </div>
-        <h2 id="word-heading" class="word">正在加载…</h2>
-        <p id="question-prompt" class="prompt"></p>
-
-        <div id="question-round-status" class="question-round-status" aria-live="polite" hidden>
-          <p id="question-round-progress">当前轮次进度：已掌握 0 / 总数 0</p>
-          <p id="last-round-word-hint" class="last-round-word-hint" hidden>本轮仅剩 1 个词，需要掌握后才能完成本轮</p>
-        </div>
-
-        <div class="word-summary" aria-live="polite" hidden>
-          <span id="word-status" class="word-status">状态：待学习</span>
-        </div>
-
-        <div
-          id="options"
-          class="options-grid"
-          role="group"
-          aria-label="中文语义分类选项"
-        ></div>
-
-        <p id="empty-state" class="empty-state" hidden>切换回随机模式可继续自由练习。</p>
-
-        <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
-
-        <div class="actions">
-          <button id="submit-answer" class="button button-primary" type="button">提交答案</button>
-          <div id="decision-actions" class="decision-actions" hidden>
-            <button id="mark-review" class="button button-secondary" type="button">加入待强化</button>
-            <button id="mark-remembered" class="button button-primary" type="button">加入已记忆</button>
-          </div>
-          <button id="next-question" class="button button-primary" type="button" hidden>下一题</button>
-        </div>
-      </section>
+        <aside class="sidebar" aria-label="待强化学习">
+          <section class="sidebar-card review-card">
+            <div class="sidebar-review-summary">
+              <span class="section-kicker">当前学习状态</span>
+              <div class="sidebar-review-count-row">
+                <h2>待强化词数</h2>
+                <strong id="review-count-stat">0</strong>
+              </div>
+            </div>
+            <div class="sidebar-heading">
+              <span class="section-kicker">按错误次数排序</span>
+              <h3>待强化排行</h3>
+            </div>
+            <ol id="review-ranking" class="review-ranking"></ol>
+            <p id="review-ranking-empty" class="ranking-empty">暂无待强化词，继续保持。</p>
+          </section>
+        </aside>
+      </div>
     </main>
     <script type="module" src="./js/app.js"></script>
   </body>
