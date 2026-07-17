@@ -606,6 +606,248 @@ h1, h2, p { margin-top: 0; }
 .category-edit-input { width: min(100%, 560px); }
 .category-manager-actions { display: flex; justify-content: flex-end; gap: 7px; }
 
+.vocabulary-manager-tabs {
+  display: flex;
+  padding: 12px 28px 0;
+  gap: 6px;
+  border-bottom: 1px solid #e7ebef;
+  background: #fafbfc;
+}
+.vocabulary-manager-tab {
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  color: #526175;
+  cursor: pointer;
+  font-weight: 800;
+}
+.vocabulary-manager-tab.active {
+  border-color: #dce5e0;
+  background: #fff;
+  color: var(--green-dark);
+}
+.word-create-form {
+  display: grid;
+  grid-template-columns: minmax(200px, 0.75fr) minmax(340px, 1.5fr) auto;
+  align-items: end;
+  padding: 20px 28px;
+  gap: 16px;
+  border-bottom: 1px solid #e7ebef;
+  background: #fafbfc;
+}
+.word-create-heading { display: grid; gap: 8px; }
+.word-create-heading label,
+.word-category-picker legend { color: #526175; font-size: 13px; font-weight: 800; }
+.word-create-heading input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  outline: none;
+}
+.word-create-heading input:focus { border-color: #73c49a; box-shadow: 0 0 0 3px rgb(31 169 97 / 12%); }
+.word-category-picker { min-width: 0; margin: 0; padding: 0; border: 0; }
+.word-category-picker legend { margin-bottom: 8px; padding: 0; }
+.word-category-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow-y: auto;
+  max-height: 156px;
+  padding: 7px;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+.word-category-option {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 6px 7px;
+  gap: 7px;
+  border-radius: 6px;
+  color: #435267;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.35;
+}
+.word-category-option:hover { background: var(--green-soft); }
+.word-category-option input { flex: 0 0 auto; margin: 2px 0 0; accent-color: var(--green); }
+.word-category-option span { min-width: 0; overflow-wrap: anywhere; }
+.word-manager-toolbar { padding: 16px 28px; border-bottom: 1px solid #e7ebef; }
+.word-manager-toolbar .wordbook-search { max-width: 620px; }
+.word-manager-list { content-visibility: auto; }
+.word-manager-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.7fr) minmax(280px, 1.7fr) auto;
+  align-items: center;
+  min-height: 62px;
+  padding: 11px 28px;
+  gap: 20px;
+  border-bottom: 1px solid #edf0f3;
+  background: #fff;
+}
+.word-manager-row:last-child { border-bottom: 0; }
+.word-manager-row:hover { background: #fbfdfc; }
+.word-manager-word { min-width: 0; overflow-wrap: anywhere; font-size: 17px; }
+.word-manager-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
+.word-manager-actions .button { min-width: 58px; }
+.word-manager-categories { display: flex; min-width: 0; flex-wrap: wrap; gap: 6px; }
+.word-manager-categories span {
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: #f1f4f6;
+  color: #435267;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.word-manager-row-editing { display: block; padding-block: 16px; background: #fbfdfc; }
+.word-manager-edit-form {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.7fr) minmax(340px, 1.6fr) auto;
+  align-items: end;
+  gap: 16px;
+}
+.word-manager-edit-heading {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.word-manager-edit-heading span { color: var(--muted); overflow-wrap: anywhere; font-size: 12px; }
+.word-manager-edit-display { display: grid; gap: 8px; color: #526175; font-size: 13px; font-weight: 800; }
+.word-manager-edit-display input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid #73c49a;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  outline: none;
+  box-shadow: 0 0 0 3px rgb(31 169 97 / 10%);
+}
+.word-manager-edit-categories { max-height: 190px; }
+.word-manager-edit-actions { display: flex; align-items: center; gap: 8px; }
+
+.button-danger { border-color: transparent; background: transparent; color: var(--red-dark); }
+.button-danger:hover:not(:disabled) { background: var(--red-soft); }
+.category-create-launcher {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 62px;
+  padding: 12px 28px;
+  gap: 16px;
+  border-bottom: 1px solid #e7ebef;
+  background: #fafbfc;
+}
+.category-create-form-expanded {
+  grid-template-columns: minmax(220px, 0.7fr) minmax(360px, 1.5fr);
+  padding-block: 18px;
+  gap: 16px 22px;
+}
+.category-create-name { display: grid; align-content: start; gap: 8px; }
+.category-create-name input,
+.category-create-word-row input,
+.category-tree-inline-form input,
+.category-tree-add-form input {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  outline: none;
+}
+.category-create-name input:focus,
+.category-create-word-row input:focus,
+.category-tree-inline-form input:focus,
+.category-tree-add-form input:focus {
+  border-color: #73c49a;
+  box-shadow: 0 0 0 3px rgb(31 169 97 / 12%);
+}
+.category-create-words { min-width: 0; margin: 0; padding: 0; border: 0; }
+.category-create-words legend { margin-bottom: 8px; padding: 0; color: #526175; font-size: 13px; font-weight: 800; }
+.category-create-word-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+.category-create-word-row strong { color: #526175; text-align: right; }
+.category-create-actions { display: flex; grid-column: 1 / -1; justify-content: flex-end; gap: 8px; }
+.category-manager-toolbar { padding: 16px 28px; border-bottom: 1px solid #e7ebef; }
+.category-manager-toolbar .wordbook-search { max-width: 620px; }
+.category-tree-item { border-bottom: 1px solid #e7ebef; background: #fff; }
+.category-tree-item:last-child { border-bottom: 0; }
+.category-tree-header {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 64px;
+  padding: 9px 28px 9px 18px;
+  gap: 10px;
+}
+.category-tree-header:hover { background: #fbfdfc; }
+.category-tree-toggle {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #435267;
+  cursor: pointer;
+  font-size: 18px;
+}
+.category-tree-toggle:hover { background: var(--green-soft); color: var(--green-dark); }
+.category-tree-summary { display: flex; align-items: baseline; min-width: 0; gap: 14px; }
+.category-tree-summary strong { min-width: 0; overflow-wrap: anywhere; font-size: 16px; }
+.category-tree-summary span { flex: 0 0 auto; color: var(--muted); font-size: 13px; }
+.category-tree-actions,
+.category-tree-word-actions { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
+.category-tree-actions .button,
+.category-tree-word-actions .button { min-width: 54px; padding-inline: 9px; }
+.category-tree-name-form { min-width: 0; }
+.category-tree-body { padding: 0 18px 14px 62px; background: #fafcfb; }
+.category-tree-words { overflow: hidden; border: 1px solid #e3e9e6; border-radius: 9px; background: #fff; }
+.category-tree-word-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 50px;
+  padding: 7px 12px 7px 16px;
+  gap: 12px;
+  border-bottom: 1px solid #edf0f3;
+}
+.category-tree-word-row:last-child { border-bottom: 0; }
+.category-tree-word-row strong { min-width: 0; overflow-wrap: anywhere; font-size: 15px; }
+.category-tree-word-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.category-tree-word-form span { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.category-tree-add-word { margin-top: 10px; }
+.category-tree-add-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  margin-top: 10px;
+  gap: 8px;
+}
+.vocabulary-delete-card { width: min(100%, 460px); }
+.vocabulary-delete-card .completion-message { max-width: 380px; }
+
 .word-detail-card { position: relative; width: min(100%, 560px); text-align: left; }
 .word-detail-card h2 { margin-right: 36px; overflow-wrap: anywhere; }
 .word-detail-close {
@@ -813,5 +1055,50 @@ h1, h2, p { margin-top: 0; }
   .category-manager-info { align-items: flex-start; flex-direction: column; gap: 3px; }
   .category-manager-info strong { font-size: 15px; }
   .category-manager-actions .button { min-width: 0; padding-inline: 10px; }
+  .vocabulary-manager-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 10px 14px 0; }
+  .vocabulary-manager-tab { min-width: 0; padding-inline: 8px; }
+  .word-create-form { grid-template-columns: 1fr; align-items: stretch; padding: 14px 16px; gap: 13px; }
+  .word-create-form > .button { width: 100%; }
+  .word-category-options { grid-template-columns: 1fr; max-height: 190px; }
+  .word-category-option { min-height: 34px; }
+  .word-manager-toolbar { padding: 14px 16px; }
+  .word-manager-toolbar .wordbook-search { min-width: 0; }
+  .word-manager-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) auto;
+    min-height: 60px;
+    padding: 9px 14px;
+    gap: 8px;
+  }
+  .word-manager-word { font-size: 15px; }
+  .word-manager-actions { align-items: flex-end; flex-direction: column; gap: 5px; }
+  .word-manager-actions .button { min-width: 52px; min-height: 30px; padding: 4px 8px; font-size: 12px; }
+  .word-manager-categories { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .word-manager-categories span { padding: 0; background: transparent; color: #526175; font-size: 12px; }
+  .word-manager-row .wordbook-status-badge { min-height: 26px; padding: 4px 7px; font-size: 11px; }
+  .word-manager-row-editing { padding: 13px 14px; }
+  .word-manager-edit-form { grid-template-columns: 1fr; align-items: stretch; gap: 12px; }
+  .word-manager-edit-heading { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .word-manager-edit-actions { justify-content: flex-end; }
+  .word-manager-edit-actions .button { min-width: 76px; }
+  .category-create-launcher { min-height: 56px; padding: 10px 16px; }
+  .category-create-form-expanded { grid-template-columns: 1fr; padding: 14px 16px; gap: 14px; }
+  .category-create-actions { grid-column: auto; }
+  .category-create-word-row { grid-template-columns: 24px minmax(0, 1fr) auto; gap: 6px; }
+  .category-create-word-row .button { min-width: 48px; padding-inline: 7px; }
+  .category-manager-toolbar { padding: 13px 16px; }
+  .category-manager-toolbar .wordbook-search { min-width: 0; }
+  .category-tree-header { grid-template-columns: 28px minmax(0, 1fr) auto; min-height: 58px; padding: 8px 12px 8px 8px; gap: 6px; }
+  .category-tree-toggle { width: 28px; height: 28px; }
+  .category-tree-summary { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .category-tree-summary strong { font-size: 14px; }
+  .category-tree-summary span { font-size: 11px; }
+  .category-tree-actions .button,
+  .category-tree-word-actions .button { min-width: 44px; min-height: 30px; padding: 4px 6px; font-size: 11px; }
+  .category-tree-body { padding: 0 10px 10px 36px; }
+  .category-tree-word-row { min-height: 46px; padding: 6px 7px 6px 10px; gap: 6px; }
+  .category-tree-word-row strong { font-size: 13px; }
+  .category-tree-word-form { grid-template-columns: 1fr; gap: 3px; }
+  .category-tree-word-form span { overflow-wrap: anywhere; white-space: normal; }
+  .category-tree-add-form { grid-template-columns: minmax(0, 1fr) auto; }
   .word-detail-card { width: min(100%, 358px); }
 }

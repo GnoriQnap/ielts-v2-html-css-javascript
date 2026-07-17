@@ -171,24 +171,50 @@
           <div>
             <span class="section-kicker">词库设置</span>
             <h1 id="vocabulary-manager-title">词库管理</h1>
-            <p>管理语义分类名称，词条内容将在后续阶段开放。</p>
+            <p>管理语义分类、词条展示文本和分类关系。</p>
           </div>
           <button id="vocabulary-manager-back" class="button button-quiet button-compact" type="button">返回学习</button>
         </header>
 
-        <form id="add-category-form" class="category-create-form" novalidate>
-          <label for="new-category-name">新增分类</label>
-          <div class="category-create-controls">
-            <input id="new-category-name" type="text" autocomplete="off" placeholder="输入分类名称">
-            <button class="button button-primary button-compact" type="submit">创建分类</button>
+        <section id="category-manager-section">
+          <div class="category-create-launcher">
+            <strong>新增分类</strong>
+            <button id="toggle-add-category" class="button button-primary button-compact" type="button">新增分类</button>
           </div>
-        </form>
 
-        <div class="category-manager-heading">
-          <strong id="category-manager-count">0 个分类</strong>
-          <p id="category-manager-notice" role="status" aria-live="polite"></p>
-        </div>
-        <div id="category-manager-list" class="category-manager-list"></div>
+          <form id="add-category-form" class="category-create-form category-create-form-expanded" novalidate hidden>
+            <label class="category-create-name" for="new-category-name">
+              <span>分类名称</span>
+              <input id="new-category-name" type="text" autocomplete="off" placeholder="输入分类名称">
+            </label>
+            <fieldset class="category-create-words">
+              <legend>词条列表</legend>
+              <div id="new-category-words"></div>
+              <button id="add-category-word-row" class="button button-quiet button-compact" type="button">＋ 添加一个词条</button>
+            </fieldset>
+            <div class="category-create-actions">
+              <button class="button button-primary button-compact" type="submit">保存分类</button>
+              <button id="cancel-add-category" class="button button-quiet button-compact" type="button">取消</button>
+            </div>
+          </form>
+
+          <div class="category-manager-toolbar">
+            <label class="wordbook-search" for="category-manager-search">
+              <span>搜索分类名称</span>
+              <span class="wordbook-search-field">
+                <input id="category-manager-search" type="search" placeholder="输入分类名称" autocomplete="off">
+                <button id="clear-category-manager-search" class="wordbook-search-clear" type="button" aria-label="清空分类搜索" hidden>×</button>
+              </span>
+            </label>
+          </div>
+
+          <div class="category-manager-heading">
+            <strong id="category-manager-count">0 个分类</strong>
+            <p id="category-manager-notice" role="status" aria-live="polite"></p>
+          </div>
+          <div id="category-manager-list" class="category-manager-list"></div>
+          <p id="category-manager-empty" class="wordbook-empty" hidden>没有找到匹配的分类。</p>
+        </section>
       </section>
     </main>
 
@@ -246,6 +272,24 @@
       </section>
     </div>
 
-    <script type="module" src="./js/app.js?v=7.2a"></script>
+    <div
+      id="vocabulary-delete-modal"
+      class="completion-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="vocabulary-delete-title"
+      hidden
+    >
+      <section class="completion-card vocabulary-delete-card">
+        <h2 id="vocabulary-delete-title">确认删除？</h2>
+        <p id="vocabulary-delete-message" class="completion-message"></p>
+        <div class="completion-actions">
+          <button id="cancel-vocabulary-delete" class="button button-quiet" type="button">取消</button>
+          <button id="confirm-vocabulary-delete" class="button button-secondary" type="button">确认删除</button>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="./js/app.js?v=7.2b3"></script>
   </body>
 </html>

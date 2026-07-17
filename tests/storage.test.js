@@ -114,6 +114,22 @@ test("state saves and restores learning and the active question", () => {
   assert.equal(loaded.rounds.current.progressByWord.critical.hasBeenShown, true);
 });
 
+test("an active question snapshot survives later vocabulary membership changes", () => {
+  const storage = new MemoryStorage();
+  saveAppState(createPersistedState(), { storage });
+
+  const loaded = loadAppState({
+    storage,
+    ...context,
+    correctGroupIdsByWordKey: new Map([["critical", new Set([1])]])
+  });
+
+  assert.equal(loaded.practice.activeQuestion.wordKey, "critical");
+  assert.deepEqual(loaded.practice.activeQuestion.optionGroupIds, [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(loaded.practice.activeQuestion.correctGroupIds, [5, 6]);
+  assert.deepEqual(loaded.practice.activeQuestion.selectedGroupIds, [6, 5]);
+});
+
 test("missing fields recover to safe defaults", () => {
   const storage = new MemoryStorage();
   storage.setItem(STORAGE_KEY, JSON.stringify({ schemaVersion: 1 }));

@@ -165,12 +165,10 @@ function normalizeActiveQuestion(candidate, context) {
   }
 
   const optionGroupIds = normalizeGroupIds(candidate.optionGroupIds, context.validGroupIds);
-  const expectedCorrectGroupIds = context.correctGroupIdsByWordKey.get(candidate.wordKey);
   const correctGroupIds = normalizeGroupIds(candidate.correctGroupIds, context.validGroupIds);
   if (
     optionGroupIds.length !== DEFAULT_OPTION_COUNT ||
-    !expectedCorrectGroupIds ||
-    !sameSet(correctGroupIds, expectedCorrectGroupIds) ||
+    correctGroupIds.length === 0 ||
     !correctGroupIds.every((groupId) => optionGroupIds.includes(groupId))
   ) {
     return null;
@@ -233,9 +231,4 @@ function normalizeCount(value) {
 
 function normalizeRoundPreparationSize(value) {
   return Number.isInteger(value) && value >= 5 ? value : null;
-}
-
-function sameSet(left, right) {
-  const rightSet = right instanceof Set ? right : new Set(right);
-  return left.length === rightSet.size && left.every((value) => rightSet.has(value));
 }

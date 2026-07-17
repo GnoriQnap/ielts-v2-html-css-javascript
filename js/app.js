@@ -11,13 +11,19 @@ import {
   LEARNING_STATUSES,
   recordAnswer
 } from "./core/learning-service.js";
-import { loadAppState, saveAppState, STORAGE_KEY } from "./core/storage.js?v=7.1";
+import { loadAppState, saveAppState, STORAGE_KEY } from "./core/storage.js?v=7.2b2";
 import { createVocabularyRepository } from "./core/vocabulary-repository.js?v=7.1";
 import {
   addCategory,
   createCategoryList,
   renameCategory
 } from "./core/vocabulary-category-service.js?v=7.2a";
+import {
+  addVocabularyWord,
+  createWordManagementEntries,
+  editVocabularyWord
+} from "./core/vocabulary-word-service.js?v=7.2b2";
+import { normalizeWordKey } from "./core/normalization.js";
 import {
   PRACTICE_MODES,
   removeReviewItem,
@@ -116,11 +122,24 @@ const elements = {
   wordDetailContent: document.querySelector("#word-detail-content"),
   closeWordDetail: document.querySelector("#close-word-detail"),
   vocabularyManagerBack: document.querySelector("#vocabulary-manager-back"),
+  toggleAddCategory: document.querySelector("#toggle-add-category"),
   addCategoryForm: document.querySelector("#add-category-form"),
   newCategoryName: document.querySelector("#new-category-name"),
+  newCategoryWords: document.querySelector("#new-category-words"),
+  addCategoryWordRow: document.querySelector("#add-category-word-row"),
+  cancelAddCategory: document.querySelector("#cancel-add-category"),
+  categoryManagerSearch: document.querySelector("#category-manager-search"),
+  clearCategoryManagerSearch: document.querySelector("#clear-category-manager-search"),
   categoryManagerCount: document.querySelector("#category-manager-count"),
   categoryManagerNotice: document.querySelector("#category-manager-notice"),
-  categoryManagerList: document.querySelector("#category-manager-list")
+  categoryManagerList: document.querySelector("#category-manager-list"),
+  categoryManagerSection: document.querySelector("#category-manager-section"),
+  categoryManagerEmpty: document.querySelector("#category-manager-empty"),
+  vocabularyDeleteModal: document.querySelector("#vocabulary-delete-modal"),
+  vocabularyDeleteTitle: document.querySelector("#vocabulary-delete-title"),
+  vocabularyDeleteMessage: document.querySelector("#vocabulary-delete-message"),
+  cancelVocabularyDelete: document.querySelector("#cancel-vocabulary-delete"),
+  confirmVocabularyDelete: document.querySelector("#confirm-vocabulary-delete")
 };
 
 let appState = null;
@@ -136,6 +155,14 @@ const expandedWordbookGroupIds = new Set();
 let editingCategoryGroupId = null;
 let categoryManagerNotice = "";
 let categoryManagerNoticeTone = "success";
+let categoryManagerQuery = "";
+let isCategoryCreateOpen = false;
+let newCategoryWordRowCount = 1;
+let editingCategoryWordKey = null;
+let addingWordGroupId = null;
+let pendingVocabularyDeleteAction = null;
+const expandedManagerGroupIds = new Set();
+let editingWordKey = null;
 
 elements.submit.addEventListener("click", submitAnswer);
 elements.markReview.addEventListener("click", () => chooseMasteryStatus(LEARNING_STATUSES.REVIEW));
@@ -164,9 +191,18 @@ elements.wordbookNav.addEventListener("click", openWordbookView);
 elements.wordbookBack.addEventListener("click", openPracticeView);
 elements.vocabularyManagerNav.addEventListener("click", openVocabularyManagerView);
 elements.vocabularyManagerBack.addEventListener("click", openPracticeView);
-elements.addCategoryForm.addEventListener("submit", handleAddCategory);
-elements.categoryManagerList.addEventListener("click", handleCategoryManagerClick);
-elements.categoryManagerList.addEventListener("keydown", handleCategoryManagerKeydown);
+elements.toggleAddCategory.addEventListener("click", openCategoryCreateFormB3);
+elements.addCategoryForm.addEventListener("submit", handleAddCategoryB3);
+elements.addCategoryWordRow.addEventListener("click", addCategoryCreateWordRowB3);
+elements.cancelAddCategory.addEventListener("click", closeCategoryCreateFormB3);
+elements.newCategoryWords.addEventListener("click", handleCategoryCreateWordsClickB3);
+elements.categoryManagerSearch.addEventListener("input", handleCategoryManagerSearchB3);
+elements.clearCategoryManagerSearch.addEventListener("click", clearCategoryManagerSearchB3);
+elements.categoryManagerList.addEventListener("click", handleCategoryManagerClickB3);
+elements.categoryManagerList.addEventListener("submit", handleCategoryManagerSubmitB3);
+elements.categoryManagerList.addEventListener("keydown", handleCategoryManagerKeydownB3);
+elements.cancelVocabularyDelete.addEventListener("click", closeVocabularyDeleteConfirmationB3);
+elements.confirmVocabularyDelete.addEventListener("click", confirmVocabularyDeleteB3);
 elements.wordbookSearch.addEventListener("input", handleWordbookSearch);
 elements.clearWordbookSearch.addEventListener("click", clearWordbookSearch);
 elements.wordbookFilters.addEventListener("click", handleWordbookFilter);
@@ -938,7 +974,7 @@ function openVocabularyManagerView(updateRoute = true) {
   if (updateRoute && window.location.hash !== "#vocabulary-manager") {
     updateViewRoute("#vocabulary-manager");
   }
-  renderCategoryManager();
+  renderVocabularyManager();
 }
 
 function renderViewFromLocation() {
@@ -957,6 +993,867 @@ function updateViewRoute(hash) {
     "",
     `${window.location.pathname}${window.location.search}${hash}`
   );
+}
+
+function handleVocabularyManagerTab(event) {
+  const button = event.target.closest("[data-manager-section]");
+  if (!button || !elements.vocabularyManagerTabs.contains(button)) {
+    return;
+  }
+  vocabularyManagerSection = button.dataset.managerSection;
+  renderVocabularyManager();
+}
+
+function renderVocabularyManager() {
+  elements.addCategoryForm.hidden = !isCategoryCreateOpen;
+  elements.toggleAddCategory.hidden = isCategoryCreateOpen;
+  renderCategoryCreateWordRowsB3();
+  renderCategoryTreeManagerB3();
+}
+
+function openCategoryCreateFormB3() {
+  isCategoryCreateOpen = true;
+  newCategoryWordRowCount = Math.max(1, newCategoryWordRowCount);
+  renderVocabularyManager();
+  elements.newCategoryName.focus();
+}
+
+function closeCategoryCreateFormB3() {
+  isCategoryCreateOpen = false;
+  elements.newCategoryName.value = "";
+  newCategoryWordRowCount = 1;
+  elements.newCategoryWords.replaceChildren();
+  renderVocabularyManager();
+}
+
+function addCategoryCreateWordRowB3() {
+  const values = getCategoryCreateWordValuesB3();
+  newCategoryWordRowCount += 1;
+  renderCategoryCreateWordRowsB3(values);
+  const inputs = elements.newCategoryWords.querySelectorAll("input");
+  inputs[inputs.length - 1]?.focus();
+}
+
+function handleCategoryCreateWordsClickB3(event) {
+  const button = event.target.closest("[data-remove-new-category-word]");
+  if (!button || !elements.newCategoryWords.contains(button)) {
+    return;
+  }
+  const removeIndex = Number(button.dataset.removeNewCategoryWord);
+  const values = getCategoryCreateWordValuesB3().filter((value, index) => index !== removeIndex);
+  newCategoryWordRowCount = Math.max(1, values.length);
+  renderCategoryCreateWordRowsB3(values);
+}
+
+function getCategoryCreateWordValuesB3() {
+  return [...elements.newCategoryWords.querySelectorAll("input")].map((input) => input.value);
+}
+
+function renderCategoryCreateWordRowsB3(values = getCategoryCreateWordValuesB3()) {
+  if (!isCategoryCreateOpen) {
+    return;
+  }
+  const fragment = document.createDocumentFragment();
+  for (let index = 0; index < newCategoryWordRowCount; index += 1) {
+    const row = document.createElement("div");
+    const number = document.createElement("strong");
+    const input = document.createElement("input");
+    const remove = document.createElement("button");
+    row.className = "category-create-word-row";
+    number.textContent = `${index + 1}.`;
+    input.type = "text";
+    input.value = values[index] ?? "";
+    input.autocomplete = "off";
+    input.placeholder = "输入英文词条";
+    input.setAttribute("aria-label", `词条 ${index + 1}`);
+    remove.type = "button";
+    remove.className = "button button-quiet button-compact";
+    remove.dataset.removeNewCategoryWord = String(index);
+    remove.textContent = "删除";
+    remove.disabled = newCategoryWordRowCount === 1;
+    row.append(number, input, remove);
+    fragment.append(row);
+  }
+  elements.newCategoryWords.replaceChildren(fragment);
+}
+
+function handleAddCategoryB3(event) {
+  event.preventDefault();
+  try {
+    const categoryResult = addCategory(currentVocabulary, elements.newCategoryName.value);
+    let candidate = categoryResult.vocabulary;
+    const nextGroupId = categoryResult.group.group_id;
+    const seenWordKeys = new Set();
+    const words = getCategoryCreateWordValuesB3().map((value) => value.trim()).filter(Boolean);
+
+    for (const displayText of words) {
+      const wordKey = normalizeWordKey(displayText);
+      if (!wordKey || seenWordKeys.has(wordKey)) {
+        continue;
+      }
+      seenWordKeys.add(wordKey);
+      if (report.index.displayByWordKey.has(wordKey)) {
+        const existingGroupIds = [...report.index.groupIdsByWordKey.get(wordKey)];
+        const result = editVocabularyWord(
+          candidate,
+          wordKey,
+          report.index.displayByWordKey.get(wordKey),
+          [...existingGroupIds, nextGroupId]
+        );
+        candidate = result.vocabulary;
+      } else {
+        candidate = addVocabularyWord(candidate, displayText, [nextGroupId]).vocabulary;
+      }
+    }
+
+    if (!saveVocabularyCandidate(candidate)) {
+      renderCategoryTreeManagerB3();
+      return;
+    }
+    expandedManagerGroupIds.add(nextGroupId);
+    isCategoryCreateOpen = false;
+    elements.newCategoryName.value = "";
+    newCategoryWordRowCount = 1;
+    elements.newCategoryWords.replaceChildren();
+    setCategoryManagerNotice(`已创建分类“${categoryResult.group.category}”。`, "success");
+  } catch (error) {
+    setCategoryManagerNotice(error.message, "error");
+  }
+  renderVocabularyManager();
+}
+
+function handleCategoryManagerSearchB3(event) {
+  categoryManagerQuery = event.target.value;
+  renderCategoryTreeManagerB3();
+}
+
+function clearCategoryManagerSearchB3() {
+  elements.categoryManagerSearch.value = "";
+  categoryManagerQuery = "";
+  renderCategoryTreeManagerB3();
+  elements.categoryManagerSearch.focus();
+}
+
+function handleCategoryManagerClickB3(event) {
+  const button = event.target.closest("[data-tree-action]");
+  if (!button || !elements.categoryManagerList.contains(button)) {
+    return;
+  }
+  const action = button.dataset.treeAction;
+  const groupId = Number(button.dataset.groupId);
+  const wordKey = button.dataset.wordKey;
+
+  if (action === "submit-category") {
+    elements.categoryManagerList.querySelector(
+      `[data-tree-form="rename-category"][data-group-id="${groupId}"]`
+    )?.requestSubmit();
+    return;
+  }
+  if (action === "submit-word") {
+    elements.categoryManagerList.querySelector(
+      `[data-tree-form="edit-word"][data-word-key="${wordKey}"]`
+    )?.requestSubmit();
+    return;
+  }
+  if (action === "toggle") {
+    if (expandedManagerGroupIds.has(groupId)) {
+      expandedManagerGroupIds.delete(groupId);
+    } else {
+      expandedManagerGroupIds.add(groupId);
+    }
+  } else if (action === "edit-category") {
+    editingCategoryGroupId = groupId;
+    expandedManagerGroupIds.add(groupId);
+  } else if (action === "cancel-category") {
+    editingCategoryGroupId = null;
+  } else if (action === "delete-category") {
+    deleteCategoryFromTreeB3(groupId);
+    return;
+  } else if (action === "edit-word") {
+    editingCategoryWordKey = wordKey;
+    addingWordGroupId = null;
+    expandedManagerGroupIds.add(groupId);
+  } else if (action === "cancel-word") {
+    editingCategoryWordKey = null;
+  } else if (action === "delete-word-relation") {
+    deleteWordRelationB3(groupId, wordKey);
+    return;
+  } else if (action === "add-word") {
+    addingWordGroupId = groupId;
+    editingCategoryWordKey = null;
+    expandedManagerGroupIds.add(groupId);
+  } else if (action === "cancel-add-word") {
+    addingWordGroupId = null;
+  }
+
+  setCategoryManagerNotice("", "success");
+  renderCategoryTreeManagerB3();
+  if (action === "edit-category") {
+    elements.categoryManagerList.querySelector(`[data-tree-category-input="${groupId}"]`)?.focus();
+  } else if (action === "edit-word") {
+    elements.categoryManagerList.querySelector(`[data-tree-word-input="${wordKey}"]`)?.focus();
+  } else if (action === "add-word") {
+    elements.categoryManagerList.querySelector(`[data-tree-add-word-input="${groupId}"]`)?.focus();
+  }
+}
+
+function handleCategoryManagerSubmitB3(event) {
+  const form = event.target.closest("[data-tree-form]");
+  if (!form || !elements.categoryManagerList.contains(form)) {
+    return;
+  }
+  event.preventDefault();
+  const groupId = Number(form.dataset.groupId);
+  if (form.dataset.treeForm === "rename-category") {
+    renameCategoryFromTreeB3(groupId, form.querySelector("input")?.value ?? "");
+  } else if (form.dataset.treeForm === "edit-word") {
+    editCategoryWordFromTreeB3(
+      form.dataset.wordKey,
+      form.querySelector("input")?.value ?? ""
+    );
+  } else if (form.dataset.treeForm === "add-word") {
+    addWordToCategoryB3(groupId, form.querySelector("input")?.value ?? "");
+  }
+}
+
+function handleCategoryManagerKeydownB3(event) {
+  if (event.key !== "Escape") {
+    return;
+  }
+  if (event.target.matches("[data-tree-category-input]")) {
+    editingCategoryGroupId = null;
+  } else if (event.target.matches("[data-tree-word-input]")) {
+    editingCategoryWordKey = null;
+  } else if (event.target.matches("[data-tree-add-word-input]")) {
+    addingWordGroupId = null;
+  } else {
+    return;
+  }
+  renderCategoryTreeManagerB3();
+}
+
+function renameCategoryFromTreeB3(groupId, value) {
+  try {
+    const result = renameCategory(currentVocabulary, groupId, value);
+    if (!saveVocabularyCandidate(result.vocabulary)) {
+      renderCategoryTreeManagerB3();
+      return;
+    }
+    editingCategoryGroupId = null;
+    setCategoryManagerNotice(`分类名称已更新为“${result.group.category}”。`, "success");
+  } catch (error) {
+    setCategoryManagerNotice(error.message, "error");
+  }
+  renderCategoryTreeManagerB3();
+}
+
+function editCategoryWordFromTreeB3(wordKey, value) {
+  try {
+    const groupIds = [...(report.index.groupIdsByWordKey.get(wordKey) ?? [])];
+    const result = editVocabularyWord(currentVocabulary, wordKey, value, groupIds);
+    if (!saveVocabularyCandidate(result.vocabulary)) {
+      renderCategoryTreeManagerB3();
+      return;
+    }
+    editingCategoryWordKey = null;
+    setCategoryManagerNotice(`已更新词条“${result.word.displayText}”。`, "success");
+  } catch (error) {
+    setCategoryManagerNotice(error.message, "error");
+  }
+  renderCategoryTreeManagerB3();
+}
+
+function addWordToCategoryB3(groupId, value) {
+  try {
+    const wordKey = normalizeWordKey(value);
+    let result;
+    if (report.index.displayByWordKey.has(wordKey)) {
+      const groupIds = [...report.index.groupIdsByWordKey.get(wordKey)];
+      if (groupIds.includes(groupId)) {
+        throw new RangeError("该词条已属于当前分类。");
+      }
+      result = editVocabularyWord(
+        currentVocabulary,
+        wordKey,
+        report.index.displayByWordKey.get(wordKey),
+        [...groupIds, groupId]
+      );
+    } else {
+      result = addVocabularyWord(currentVocabulary, value, [groupId]);
+    }
+    if (!saveVocabularyCandidate(result.vocabulary)) {
+      renderCategoryTreeManagerB3();
+      return;
+    }
+    addingWordGroupId = null;
+    setCategoryManagerNotice(`已向当前分类新增词条“${result.word.displayText}”。`, "success");
+  } catch (error) {
+    setCategoryManagerNotice(error.message, "error");
+  }
+  renderCategoryTreeManagerB3();
+}
+
+function deleteWordRelationB3(groupId, wordKey) {
+  const groupIds = [...(report.index.groupIdsByWordKey.get(wordKey) ?? [])];
+  const displayText = report.index.displayByWordKey.get(wordKey) ?? wordKey;
+  if (groupIds.length <= 1) {
+    setCategoryManagerNotice("该词条仅属于当前分类，不能删除最后一个分类关系。", "error");
+    renderCategoryTreeManagerB3();
+    return;
+  }
+  openVocabularyDeleteConfirmationB3({
+    title: "移除分类关系？",
+    message: `确定从当前分类移除“${displayText}”？只会删除当前分类关系。`,
+    confirmLabel: "确认移除",
+    action: () => performDeleteWordRelationB3(groupId, wordKey, displayText, groupIds)
+  });
+}
+
+function performDeleteWordRelationB3(groupId, wordKey, displayText, groupIds) {
+  try {
+    const result = editVocabularyWord(
+      currentVocabulary,
+      wordKey,
+      displayText,
+      groupIds.filter((item) => item !== groupId)
+    );
+    if (!saveVocabularyCandidate(result.vocabulary)) {
+      renderCategoryTreeManagerB3();
+      return;
+    }
+    editingCategoryWordKey = null;
+    setCategoryManagerNotice(`已移除“${displayText}”与当前分类的关系。`, "success");
+  } catch (error) {
+    setCategoryManagerNotice(error.message, "error");
+  }
+  renderCategoryTreeManagerB3();
+}
+
+function deleteCategoryFromTreeB3(groupId) {
+  const group = report.index.groupById.get(groupId);
+  if (!group) {
+    setCategoryManagerNotice("没有找到需要删除的分类。", "error");
+    renderCategoryTreeManagerB3();
+    return;
+  }
+  const wordKeys = getGroupWordKeysB3(group);
+  const exclusiveWordKeys = wordKeys.filter((wordKey) => (
+    (report.index.groupIdsByWordKey.get(wordKey)?.size ?? 0) <= 1
+  ));
+  if (exclusiveWordKeys.length > 0) {
+    setCategoryManagerNotice(
+      `该分类包含 ${exclusiveWordKeys.length} 个仅属于本分类的词条，当前版本不能删除以避免全局删词。`,
+      "error"
+    );
+    renderCategoryTreeManagerB3();
+    return;
+  }
+  if (appState.practice.activeQuestion?.optionGroupIds.includes(groupId)) {
+    setCategoryManagerNotice("当前题正在使用该分类，请先完成当前题。", "error");
+    renderCategoryTreeManagerB3();
+    return;
+  }
+  const multiCount = wordKeys.length;
+  const message = multiCount > 0
+    ? `确定删除分类“${group.category}”？其中 ${multiCount} 个多分类词将只移除本分类关系。`
+    : `确定删除空分类“${group.category}”？`;
+  openVocabularyDeleteConfirmationB3({
+    title: "删除分类？",
+    message,
+    confirmLabel: "确认删除",
+    action: () => performDeleteCategoryB3(groupId, group, wordKeys)
+  });
+}
+
+function performDeleteCategoryB3(groupId, group, wordKeys) {
+  try {
+    let candidate = currentVocabulary;
+    for (const wordKey of wordKeys) {
+      const groupIds = [...report.index.groupIdsByWordKey.get(wordKey)].filter((item) => item !== groupId);
+      candidate = editVocabularyWord(
+        candidate,
+        wordKey,
+        report.index.displayByWordKey.get(wordKey),
+        groupIds
+      ).vocabulary;
+    }
+    candidate = {
+      ...candidate,
+      vocabulary_list: candidate.vocabulary_list.filter((item) => item.group_id !== groupId)
+    };
+    if (!saveVocabularyCandidate(candidate)) {
+      renderCategoryTreeManagerB3();
+      return;
+    }
+    expandedManagerGroupIds.delete(groupId);
+    editingCategoryGroupId = null;
+    setCategoryManagerNotice(`已删除分类“${group.category}”。`, "success");
+  } catch (error) {
+    setCategoryManagerNotice(error.message, "error");
+  }
+  renderCategoryTreeManagerB3();
+}
+
+function openVocabularyDeleteConfirmationB3({ title, message, confirmLabel, action }) {
+  pendingVocabularyDeleteAction = action;
+  elements.vocabularyDeleteTitle.textContent = title;
+  elements.vocabularyDeleteMessage.textContent = message;
+  elements.confirmVocabularyDelete.textContent = confirmLabel;
+  elements.vocabularyDeleteModal.hidden = false;
+  document.body.classList.add("modal-open");
+  elements.cancelVocabularyDelete.focus();
+}
+
+function closeVocabularyDeleteConfirmationB3() {
+  pendingVocabularyDeleteAction = null;
+  elements.vocabularyDeleteModal.hidden = true;
+  document.body.classList.remove("modal-open");
+}
+
+function confirmVocabularyDeleteB3() {
+  const action = pendingVocabularyDeleteAction;
+  closeVocabularyDeleteConfirmationB3();
+  action?.();
+}
+
+function renderCategoryTreeManagerB3() {
+  const query = categoryManagerQuery.trim().toLocaleLowerCase("zh-CN");
+  const categories = createCategoryList(currentVocabulary);
+  const visibleCategories = categories.filter((item) => (
+    !query || item.category.toLocaleLowerCase("zh-CN").includes(query)
+  ));
+  const entriesByWordKey = new Map(
+    createWordManagementEntries(report.index, appState.learning)
+      .map((entry) => [entry.wordKey, entry])
+  );
+  const fragment = document.createDocumentFragment();
+
+  for (const item of visibleCategories) {
+    const article = document.createElement("article");
+    const header = document.createElement("div");
+    article.className = "category-tree-item";
+    article.dataset.groupId = String(item.groupId);
+    header.className = "category-tree-header";
+    header.append(
+      createTreeToggleB3(item),
+      item.groupId === editingCategoryGroupId
+        ? createTreeCategoryEditFormB3(item)
+        : createTreeCategorySummaryB3(item),
+      createTreeCategoryActionsB3(item)
+    );
+    article.append(header);
+
+    if (expandedManagerGroupIds.has(item.groupId)) {
+      article.append(createTreeCategoryBodyB3(item, entriesByWordKey));
+    }
+    fragment.append(article);
+  }
+
+  elements.categoryManagerList.replaceChildren(fragment);
+  elements.categoryManagerCount.textContent = `${visibleCategories.length} 个分类`;
+  elements.categoryManagerNotice.textContent = categoryManagerNotice;
+  elements.categoryManagerNotice.dataset.tone = categoryManagerNoticeTone;
+  elements.clearCategoryManagerSearch.hidden = !categoryManagerQuery;
+  elements.categoryManagerEmpty.hidden = visibleCategories.length > 0;
+  elements.categoryManagerList.hidden = visibleCategories.length === 0;
+}
+
+function createTreeToggleB3(item) {
+  const button = document.createElement("button");
+  const isExpanded = expandedManagerGroupIds.has(item.groupId);
+  button.type = "button";
+  button.className = "category-tree-toggle";
+  button.dataset.treeAction = "toggle";
+  button.dataset.groupId = String(item.groupId);
+  button.setAttribute("aria-expanded", String(isExpanded));
+  button.setAttribute("aria-label", `${isExpanded ? "收起" : "展开"}分类：${item.category}`);
+  button.textContent = isExpanded ? "▾" : "▸";
+  return button;
+}
+
+function createTreeCategorySummaryB3(item) {
+  const summary = document.createElement("div");
+  const name = document.createElement("strong");
+  const count = document.createElement("span");
+  summary.className = "category-tree-summary";
+  name.textContent = item.category;
+  count.textContent = `${item.wordCount} 个词`;
+  summary.append(name, count);
+  return summary;
+}
+
+function createTreeCategoryEditFormB3(item) {
+  const form = document.createElement("form");
+  const input = document.createElement("input");
+  form.className = "category-tree-inline-form category-tree-name-form";
+  form.dataset.treeForm = "rename-category";
+  form.dataset.groupId = String(item.groupId);
+  input.type = "text";
+  input.value = item.category;
+  input.dataset.treeCategoryInput = String(item.groupId);
+  input.setAttribute("aria-label", `编辑分类名称：${item.category}`);
+  form.append(input);
+  return form;
+}
+
+function createTreeCategoryActionsB3(item) {
+  const actions = document.createElement("div");
+  actions.className = "category-tree-actions";
+  if (item.groupId === editingCategoryGroupId) {
+    actions.append(
+      createTreeActionButtonB3("保存", "submit-category", item.groupId, "button-primary"),
+      createTreeActionButtonB3("取消", "cancel-category", item.groupId, "button-quiet")
+    );
+  } else {
+    actions.append(
+      createTreeActionButtonB3("编辑", "edit-category", item.groupId, "button-quiet"),
+      createTreeActionButtonB3("删除", "delete-category", item.groupId, "button-danger")
+    );
+  }
+  return actions;
+}
+
+function createTreeCategoryBodyB3(item, entriesByWordKey) {
+  const body = document.createElement("div");
+  const list = document.createElement("div");
+  const group = report.index.groupById.get(item.groupId);
+  body.className = "category-tree-body";
+  list.className = "category-tree-words";
+  for (const wordKey of getGroupWordKeysB3(group)) {
+    const entry = entriesByWordKey.get(wordKey);
+    if (entry) {
+      list.append(createTreeWordRowB3(item.groupId, entry));
+    }
+  }
+  body.append(list, createTreeAddWordAreaB3(item.groupId));
+  return body;
+}
+
+function createTreeWordRowB3(groupId, entry) {
+  const row = document.createElement("div");
+  row.className = "category-tree-word-row";
+  row.dataset.wordKey = entry.wordKey;
+  if (entry.wordKey === editingCategoryWordKey) {
+    const form = document.createElement("form");
+    const input = document.createElement("input");
+    const identity = document.createElement("span");
+    form.className = "category-tree-inline-form category-tree-word-form";
+    form.dataset.treeForm = "edit-word";
+    form.dataset.groupId = String(groupId);
+    form.dataset.wordKey = entry.wordKey;
+    input.type = "text";
+    input.value = entry.displayText;
+    input.dataset.treeWordInput = entry.wordKey;
+    input.setAttribute("aria-label", `编辑词条：${entry.displayText}`);
+    identity.textContent = `wordKey：${entry.wordKey}`;
+    form.append(input, identity);
+    row.append(
+      form,
+      createTreeWordActionsB3(groupId, entry.wordKey, true)
+    );
+  } else {
+    const word = document.createElement("strong");
+    word.textContent = entry.displayText;
+    row.append(word, createTreeWordActionsB3(groupId, entry.wordKey, false));
+  }
+  return row;
+}
+
+function createTreeWordActionsB3(groupId, wordKey, isEditing) {
+  const actions = document.createElement("div");
+  actions.className = "category-tree-word-actions";
+  if (isEditing) {
+    const save = createTreeActionButtonB3("保存", "submit-word", groupId, "button-primary", wordKey);
+    actions.append(save, createTreeActionButtonB3("取消", "cancel-word", groupId, "button-quiet", wordKey));
+  } else {
+    actions.append(
+      createTreeActionButtonB3("编辑", "edit-word", groupId, "button-quiet", wordKey),
+      createTreeActionButtonB3("删除", "delete-word-relation", groupId, "button-danger", wordKey)
+    );
+  }
+  return actions;
+}
+
+function createTreeAddWordAreaB3(groupId) {
+  if (addingWordGroupId !== groupId) {
+    const button = createTreeActionButtonB3("＋ 新增词条", "add-word", groupId, "button-quiet");
+    button.classList.add("category-tree-add-word");
+    return button;
+  }
+  const form = document.createElement("form");
+  const input = document.createElement("input");
+  const actions = document.createElement("div");
+  const save = document.createElement("button");
+  form.className = "category-tree-add-form";
+  form.dataset.treeForm = "add-word";
+  form.dataset.groupId = String(groupId);
+  input.type = "text";
+  input.autocomplete = "off";
+  input.placeholder = "输入英文词条";
+  input.dataset.treeAddWordInput = String(groupId);
+  input.setAttribute("aria-label", "新增英文词条");
+  actions.className = "category-tree-word-actions";
+  save.type = "submit";
+  save.className = "button button-primary button-compact";
+  save.textContent = "保存";
+  actions.append(save, createTreeActionButtonB3("取消", "cancel-add-word", groupId, "button-quiet"));
+  form.append(input, actions);
+  return form;
+}
+
+function createTreeActionButtonB3(label, action, groupId, styleClass, wordKey = null) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `button button-compact ${styleClass}`;
+  button.textContent = label;
+  button.dataset.treeAction = action;
+  button.dataset.groupId = String(groupId);
+  if (wordKey) {
+    button.dataset.wordKey = wordKey;
+  }
+  return button;
+}
+
+function getGroupWordKeysB3(group) {
+  const seen = new Set();
+  const keys = [];
+  for (const word of Array.isArray(group?.words) ? group.words : []) {
+    const wordKey = normalizeWordKey(word);
+    if (wordKey && !seen.has(wordKey)) {
+      seen.add(wordKey);
+      keys.push(wordKey);
+    }
+  }
+  return keys;
+}
+
+function handleAddVocabularyWord(event) {
+  event.preventDefault();
+  const selectedGroupIds = [...elements.newWordCategoryOptions.querySelectorAll("input:checked")]
+    .map((input) => Number(input.value));
+
+  try {
+    const result = addVocabularyWord(
+      currentVocabulary,
+      elements.newWordText.value,
+      selectedGroupIds
+    );
+    if (!saveVocabularyCandidate(result.vocabulary, setWordManagerNotice)) {
+      renderWordManager();
+      return;
+    }
+    elements.newWordText.value = "";
+    for (const checkbox of elements.newWordCategoryOptions.querySelectorAll("input:checked")) {
+      checkbox.checked = false;
+    }
+    setWordManagerNotice(`已新增词条“${result.word.displayText}”。`, "success");
+  } catch (error) {
+    setWordManagerNotice(error.message, "error");
+  }
+  renderWordManager();
+}
+
+function handleWordManagerSearch(event) {
+  wordManagerQuery = event.target.value;
+  renderWordManager();
+}
+
+function clearWordManagerSearch() {
+  elements.wordManagerSearch.value = "";
+  wordManagerQuery = "";
+  renderWordManager();
+  elements.wordManagerSearch.focus();
+}
+
+function handleWordManagerClick(event) {
+  const button = event.target.closest("[data-word-action]");
+  if (!button || !elements.wordManagerList.contains(button)) {
+    return;
+  }
+
+  if (button.dataset.wordAction === "edit") {
+    editingWordKey = button.dataset.wordKey;
+    setWordManagerNotice("", "success");
+    renderWordManager();
+    const input = elements.wordManagerList.querySelector("[data-word-edit-text]");
+    input?.focus();
+    input?.select();
+  } else if (button.dataset.wordAction === "cancel") {
+    editingWordKey = null;
+    setWordManagerNotice("", "success");
+    renderWordManager();
+  }
+}
+
+function handleWordManagerSubmit(event) {
+  const form = event.target.closest("[data-word-edit-form]");
+  if (!form || !elements.wordManagerList.contains(form)) {
+    return;
+  }
+  event.preventDefault();
+
+  const selectedGroupIds = [...form.querySelectorAll("input[type=checkbox]:checked")]
+    .map((input) => Number(input.value));
+  const displayText = form.querySelector("[data-word-edit-text]")?.value ?? "";
+
+  try {
+    const result = editVocabularyWord(
+      currentVocabulary,
+      form.dataset.wordKey,
+      displayText,
+      selectedGroupIds
+    );
+    if (!saveVocabularyCandidate(result.vocabulary, setWordManagerNotice)) {
+      renderWordManager();
+      return;
+    }
+    editingWordKey = null;
+    setWordManagerNotice(`已更新词条“${result.word.displayText}”。`, "success");
+  } catch (error) {
+    setWordManagerNotice(error.message, "error");
+  }
+  renderWordManager();
+}
+
+function setWordManagerNotice(message, tone) {
+  wordManagerNotice = message;
+  wordManagerNoticeTone = tone;
+}
+
+function renderWordCategoryOptions() {
+  const categories = createCategoryList(currentVocabulary);
+  const selectedGroupIds = new Set(
+    [...elements.newWordCategoryOptions.querySelectorAll("input:checked")]
+      .map((input) => Number(input.value))
+  );
+  const fragment = document.createDocumentFragment();
+
+  for (const item of categories) {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    const text = document.createElement("span");
+    label.className = "word-category-option";
+    checkbox.type = "checkbox";
+    checkbox.value = String(item.groupId);
+    checkbox.checked = selectedGroupIds.has(item.groupId);
+    text.textContent = item.category;
+    label.append(checkbox, text);
+    fragment.append(label);
+  }
+  elements.newWordCategoryOptions.replaceChildren(fragment);
+}
+
+function renderWordManager() {
+  const entries = createWordManagementEntries(report.index, appState.learning);
+  const visibleEntries = filterWordManagementEntries(entries, wordManagerQuery);
+  const fragment = document.createDocumentFragment();
+
+  for (const entry of visibleEntries) {
+    const row = document.createElement("article");
+    row.dataset.wordKey = entry.wordKey;
+    if (entry.wordKey === editingWordKey) {
+      renderWordManagerEditRow(row, entry);
+      fragment.append(row);
+      continue;
+    }
+    const word = document.createElement("strong");
+    const categories = document.createElement("div");
+    const status = document.createElement("span");
+    const actions = document.createElement("div");
+    const edit = document.createElement("button");
+    row.className = "word-manager-row";
+    word.className = "word-manager-word";
+    word.textContent = entry.displayText;
+    categories.className = "word-manager-categories";
+    for (const item of entry.categories) {
+      const category = document.createElement("span");
+      category.textContent = item.category;
+      categories.append(category);
+    }
+    status.className = "wordbook-status-badge";
+    status.dataset.status = entry.status;
+    status.textContent = statusLabel(entry.status);
+    actions.className = "word-manager-actions";
+    edit.className = "button button-quiet button-compact";
+    edit.type = "button";
+    edit.dataset.wordAction = "edit";
+    edit.dataset.wordKey = entry.wordKey;
+    edit.textContent = "编辑";
+    actions.append(status, edit);
+    row.append(word, categories, actions);
+    fragment.append(row);
+  }
+
+  elements.wordManagerList.replaceChildren(fragment);
+  elements.wordManagerCount.textContent = `${visibleEntries.length} 个词条`;
+  elements.wordManagerNotice.textContent = wordManagerNotice;
+  elements.wordManagerNotice.dataset.tone = wordManagerNoticeTone;
+  elements.clearWordManagerSearch.hidden = !wordManagerQuery;
+  elements.wordManagerEmpty.hidden = visibleEntries.length > 0;
+  elements.wordManagerList.hidden = visibleEntries.length === 0;
+}
+
+function renderWordManagerEditRow(row, entry) {
+  const form = document.createElement("form");
+  const heading = document.createElement("div");
+  const title = document.createElement("strong");
+  const identity = document.createElement("span");
+  const displayLabel = document.createElement("label");
+  const displayTitle = document.createElement("span");
+  const displayInput = document.createElement("input");
+  const categoryPicker = document.createElement("fieldset");
+  const categoryLegend = document.createElement("legend");
+  const categoryOptions = document.createElement("div");
+  const actions = document.createElement("div");
+  const save = document.createElement("button");
+  const cancel = document.createElement("button");
+
+  row.className = "word-manager-row word-manager-row-editing";
+  form.className = "word-manager-edit-form";
+  form.dataset.wordEditForm = "";
+  form.dataset.wordKey = entry.wordKey;
+  heading.className = "word-manager-edit-heading";
+  title.textContent = "编辑词条";
+  identity.textContent = `wordKey：${entry.wordKey}（不可修改）`;
+  heading.append(title, identity);
+
+  displayLabel.className = "word-manager-edit-display";
+  displayTitle.textContent = "展示文本";
+  displayInput.type = "text";
+  displayInput.value = entry.displayText;
+  displayInput.autocomplete = "off";
+  displayInput.dataset.wordEditText = "";
+  displayLabel.append(displayTitle, displayInput);
+
+  categoryPicker.className = "word-category-picker";
+  categoryLegend.textContent = "所属分类（可多选）";
+  categoryOptions.className = "word-category-options word-manager-edit-categories";
+  const selectedGroupIds = new Set(entry.categories.map(({ groupId }) => groupId));
+  for (const item of createCategoryList(currentVocabulary)) {
+    const label = document.createElement("label");
+    const checkbox = document.createElement("input");
+    const text = document.createElement("span");
+    label.className = "word-category-option";
+    checkbox.type = "checkbox";
+    checkbox.value = String(item.groupId);
+    checkbox.checked = selectedGroupIds.has(item.groupId);
+    text.textContent = item.category;
+    label.append(checkbox, text);
+    categoryOptions.append(label);
+  }
+  categoryPicker.append(categoryLegend, categoryOptions);
+
+  actions.className = "word-manager-edit-actions";
+  save.className = "button button-primary button-compact";
+  save.type = "submit";
+  save.textContent = "保存";
+  cancel.className = "button button-quiet button-compact";
+  cancel.type = "button";
+  cancel.dataset.wordAction = "cancel";
+  cancel.textContent = "取消";
+  actions.append(save, cancel);
+  form.append(heading, displayLabel, categoryPicker, actions);
+  row.append(form);
 }
 
 function handleAddCategory(event) {
@@ -1039,10 +1936,10 @@ function submitCategoryRename(groupId) {
   renderCategoryManager();
 }
 
-function saveVocabularyCandidate(candidate) {
+function saveVocabularyCandidate(candidate, reportError = setCategoryManagerNotice) {
   const validation = validateVocabularyData(candidate);
   if (!validation.isValid) {
-    setCategoryManagerNotice(
+    reportError(
       validation.errors[0]?.message ?? "词库校验失败，未保存修改。",
       "error"
     );
@@ -1054,7 +1951,7 @@ function saveVocabularyCandidate(candidate) {
     currentVocabulary = vocabularyRepository.getCurrentVocabulary();
     report = validateVocabularyData(currentVocabulary);
   } catch {
-    setCategoryManagerNotice("词库保存失败，请检查浏览器存储权限。", "error");
+    reportError("词库保存失败，请检查浏览器存储权限。", "error");
     return false;
   }
 
