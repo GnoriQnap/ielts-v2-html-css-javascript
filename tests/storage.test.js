@@ -13,7 +13,6 @@ const vocabulary = {
   ]
 };
 const context = {
-  vocabulary,
   validWordKeys: new Set(["critical", "word-2", "word-3", "word-4", "word-5"]),
   validGroupIds: new Set([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
   correctGroupIdsByWordKey: new Map([["critical", new Set([5, 6])]])
@@ -34,7 +33,7 @@ class MemoryStorage {
 }
 
 function createPersistedState() {
-  const state = createDefaultAppState(vocabulary);
+  const state = createDefaultAppState();
   state.learning.byWordKey.critical = {
     status: "review",
     correctCount: 2,
@@ -129,7 +128,7 @@ test("missing fields recover to safe defaults", () => {
   assert.equal(loaded.practice.freeAttemptCount, 0);
   assert.deepEqual(loaded.practice.reviewQueue, []);
   assert.deepEqual(loaded.rounds, { current: null, lastCompletedSummary: null });
-  assert.deepEqual(loaded.vocabulary, vocabulary);
+  assert.equal("vocabulary" in loaded, false);
 });
 
 test("round preparation persists only with a valid preview question and no active round", () => {
@@ -193,7 +192,7 @@ test("damaged JSON returns a usable default state", () => {
   assert.equal(loaded.schemaVersion, 1);
   assert.deepEqual(loaded.learning, { byWordKey: {} });
   assert.equal(loaded.practice.activeQuestion, null);
-  assert.deepEqual(loaded.vocabulary, vocabulary);
+  assert.equal("vocabulary" in loaded, false);
 });
 
 test("invalid review queue fields recover and remembered words are removed", () => {

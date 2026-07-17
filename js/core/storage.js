@@ -9,11 +9,10 @@ import { DEFAULT_OPTION_COUNT } from "./question-engine.js";
 export const STORAGE_KEY = "ielts_synonym_trainer_state";
 export const SCHEMA_VERSION = 1;
 
-export function createDefaultAppState(vocabulary) {
+export function createDefaultAppState() {
   return {
     schemaVersion: SCHEMA_VERSION,
     savedAt: null,
-    vocabulary: clonePlain(vocabulary),
     learning: {
       byWordKey: {}
     },
@@ -36,12 +35,11 @@ export function createDefaultAppState(vocabulary) {
 export function loadAppState(options) {
   const {
     storage = globalThis.localStorage,
-    vocabulary,
     validWordKeys = new Set(),
     validGroupIds = new Set(),
     correctGroupIdsByWordKey = new Map()
   } = options;
-  const defaultState = createDefaultAppState(vocabulary);
+  const defaultState = createDefaultAppState();
 
   try {
     const serialized = storage.getItem(STORAGE_KEY);
@@ -103,7 +101,6 @@ export function normalizeAppState(candidate, context) {
   return {
     schemaVersion: SCHEMA_VERSION,
     savedAt: typeof candidate.savedAt === "string" ? candidate.savedAt : null,
-    vocabulary: normalizeVocabulary(candidate.vocabulary, defaultState.vocabulary),
     learning,
     practice: {
       mode: Object.values(PRACTICE_MODES).includes(candidate.practice?.mode)
@@ -125,13 +122,6 @@ export function normalizeAppState(candidate, context) {
     },
     rounds
   };
-}
-
-function normalizeVocabulary(candidate, fallback) {
-  if (candidate && typeof candidate === "object" && Array.isArray(candidate.vocabulary_list)) {
-    return clonePlain(candidate);
-  }
-  return clonePlain(fallback);
 }
 
 function normalizeLearning(candidate, validWordKeys) {
@@ -248,8 +238,4 @@ function normalizeRoundPreparationSize(value) {
 function sameSet(left, right) {
   const rightSet = right instanceof Set ? right : new Set(right);
   return left.length === rightSet.size && left.every((value) => rightSet.has(value));
-}
-
-function clonePlain(value) {
-  return JSON.parse(JSON.stringify(value));
 }

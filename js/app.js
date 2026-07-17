@@ -11,7 +11,8 @@ import {
   LEARNING_STATUSES,
   recordAnswer
 } from "./core/learning-service.js";
-import { loadAppState, saveAppState } from "./core/storage.js?v=5.15";
+import { loadAppState, saveAppState, STORAGE_KEY } from "./core/storage.js?v=7.1";
+import { createVocabularyRepository } from "./core/vocabulary-repository.js?v=7.1";
 import {
   PRACTICE_MODES,
   removeReviewItem,
@@ -41,7 +42,13 @@ import {
   WORDBOOK_FILTERS
 } from "./core/wordbook-service.js?v=6.0";
 
-const report = validateVocabularyData(vocabularyData);
+const vocabularyRepository = createVocabularyRepository({
+  fallbackVocabulary: vocabularyData,
+  legacyStateKey: STORAGE_KEY
+});
+vocabularyRepository.load();
+const currentVocabulary = vocabularyRepository.getCurrentVocabulary();
+const report = validateVocabularyData(currentVocabulary);
 const elements = {
   siteHeader: document.querySelector("#site-header"),
   practiceMain: document.querySelector("#practice-main"),
@@ -149,7 +156,6 @@ window.addEventListener("hashchange", renderViewFromLocation);
 
 if (report.isValid) {
   appState = loadAppState({
-    vocabulary: vocabularyData,
     validWordKeys: new Set(report.index.allWordKeys),
     validGroupIds: new Set(report.index.groupById.keys()),
     correctGroupIdsByWordKey: report.index.groupIdsByWordKey
@@ -933,7 +939,7 @@ function handleWordbookFilter(event) {
 }
 
 function renderWordbook() {
-  const annotations = vocabularyData.word_details ?? vocabularyData.wordDetails ?? {};
+  const annotations = currentVocabulary.word_details ?? currentVocabulary.wordDetails ?? {};
   const entries = createWordbookEntries(report.index, appState.learning, annotations);
   const isCategoryTree = wordbookFilter === WORDBOOK_FILTERS.ALL && !wordbookQuery.trim();
   elements.clearWordbookSearch.hidden = !wordbookQuery;
@@ -1132,7 +1138,7 @@ function handleWordbookListClick(event) {
 }
 
 function openWordDetail(wordKey) {
-  const annotations = vocabularyData.word_details ?? vocabularyData.wordDetails ?? {};
+  const annotations = currentVocabulary.word_details ?? currentVocabulary.wordDetails ?? {};
   const entry = createWordbookEntries(report.index, appState.learning, annotations)
     .find((item) => item.wordKey === wordKey);
   if (!entry) {

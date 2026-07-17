@@ -22,7 +22,7 @@ const vocabulary = {
 
 test("wordbook shows review state and every category membership", () => {
   const index = createVocabularyIndex(vocabulary.vocabulary_list);
-  const state = createDefaultAppState(vocabulary);
+  const state = createDefaultAppState();
   state.learning.byWordKey.sustain = { status: "review" };
 
   const sustain = createWordbookEntries(index, state.learning)
@@ -60,7 +60,7 @@ test("wordbook search matches English case-insensitively and any Chinese categor
 });
 
 test("remembered removes review scheduling and review does not schedule an error retry", () => {
-  const state = createDefaultAppState(vocabulary);
+  const state = createDefaultAppState();
   state.learning.byWordKey.sustain = { status: "review" };
   state.practice.reviewQueue = [{ wordKey: "sustain" }];
 
@@ -85,7 +85,7 @@ test("remembered removes review scheduling and review does not schedule an error
 });
 
 test("manual status change is blocked for the active question", () => {
-  const state = createDefaultAppState(vocabulary);
+  const state = createDefaultAppState();
   state.practice.activeQuestion = { wordKey: "sustain" };
 
   const result = applyWordbookStatusChange({
@@ -99,7 +99,7 @@ test("manual status change is blocked for the active question", () => {
 });
 
 test("manual status changes synchronize and can complete an active round", () => {
-  const state = createDefaultAppState(vocabulary);
+  const state = createDefaultAppState();
   const wordKeys = ["sustain", "keep", "support", "study", "research"];
   state.rounds.current = {
     id: "round-wordbook",
@@ -126,7 +126,7 @@ test("manual status changes synchronize and can complete an active round", () =>
   assert.equal(completed.state.rounds.current, null);
   assert.equal(completed.state.rounds.lastCompletedSummary.masteredCount, 5);
 
-  const reopenedState = createDefaultAppState(vocabulary);
+  const reopenedState = createDefaultAppState();
   reopenedState.learning.byWordKey.sustain = { status: "remembered" };
   reopenedState.rounds.current = {
     ...state.rounds.current,
