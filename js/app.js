@@ -16,13 +16,15 @@ import { createVocabularyRepository } from "./core/vocabulary-repository.js?v=7.
 import {
   addCategory,
   createCategoryList,
+  deleteCategory,
   renameCategory
-} from "./core/vocabulary-category-service.js?v=7.2a";
+} from "./core/vocabulary-category-service.js?v=7.2c1";
 import {
   addVocabularyWord,
   createWordManagementEntries,
-  editVocabularyWord
-} from "./core/vocabulary-word-service.js?v=7.2b2";
+  editVocabularyWord,
+  removeVocabularyWordRelation
+} from "./core/vocabulary-word-service.js?v=7.2c2";
 import { normalizeWordKey } from "./core/normalization.js";
 import {
   PRACTICE_MODES,
@@ -1294,35 +1296,39 @@ function addWordToCategoryB3(groupId, value) {
 }
 
 function deleteWordRelationB3(groupId, wordKey) {
-  const groupIds = [...(report.index.groupIdsByWordKey.get(wordKey) ?? [])];
-  const displayText = report.index.displayByWordKey.get(wordKey) ?? wordKey;
-  if (groupIds.length <= 1) {
-    setCategoryManagerNotice("该词条仅属于当前分类，不能删除最后一个分类关系。", "error");
+  try {
+    const removal = createWordRelationRemovalB3(groupId, wordKey);
+    openVocabularyDeleteConfirmationB3({
+      title: `移除词条：${removal.word.displayText}`,
+      message: `与分类：${removal.category.category} 的关系？`,
+      confirmLabel: "确认移除",
+      action: () => performDeleteWordRelationB3(groupId, wordKey)
+    });
+  } catch (error) {
+    setCategoryManagerNotice(error.message, "error");
     renderCategoryTreeManagerB3();
-    return;
   }
-  openVocabularyDeleteConfirmationB3({
-    title: "移除分类关系？",
-    message: `确定从当前分类移除“${displayText}”？只会删除当前分类关系。`,
-    confirmLabel: "确认移除",
-    action: () => performDeleteWordRelationB3(groupId, wordKey, displayText, groupIds)
+}
+
+function createWordRelationRemovalB3(groupId, wordKey) {
+  const activeWordKey = appState.practice.activeQuestion?.wordKey;
+  return removeVocabularyWordRelation(currentVocabulary, wordKey, groupId, {
+    protectedWordKeys: activeWordKey ? [activeWordKey] : []
   });
 }
 
-function performDeleteWordRelationB3(groupId, wordKey, displayText, groupIds) {
+function performDeleteWordRelationB3(groupId, wordKey) {
   try {
-    const result = editVocabularyWord(
-      currentVocabulary,
-      wordKey,
-      displayText,
-      groupIds.filter((item) => item !== groupId)
-    );
-    if (!saveVocabularyCandidate(result.vocabulary)) {
+    const removal = createWordRelationRemovalB3(groupId, wordKey);
+    if (!saveVocabularyCandidate(removal.vocabulary)) {
       renderCategoryTreeManagerB3();
       return;
     }
     editingCategoryWordKey = null;
-    setCategoryManagerNotice(`已移除“${displayText}”与当前分类的关系。`, "success");
+    setCategoryManagerNotice(
+      `已移除“${removal.word.displayText}”与分类“${removal.category.category}”的关系。`,
+      "success"
+    );
   } catch (error) {
     setCategoryManagerNotice(error.message, "error");
   }
@@ -1330,64 +1336,36 @@ function performDeleteWordRelationB3(groupId, wordKey, displayText, groupIds) {
 }
 
 function deleteCategoryFromTreeB3(groupId) {
-  const group = report.index.groupById.get(groupId);
-  if (!group) {
-    setCategoryManagerNotice("没有找到需要删除的分类。", "error");
+  try {
+    const deletion = createCategoryDeletionB3(groupId);
+    openVocabularyDeleteConfirmationB3({
+      title: `删除分类「${deletion.group.category}」`,
+      message: `将解除 ${deletion.removedRelationCount} 个词条关系。确认删除？`,
+      confirmLabel: "确认删除",
+      action: () => performDeleteCategoryB3(groupId)
+    });
+  } catch (error) {
+    setCategoryManagerNotice(error.message, "error");
     renderCategoryTreeManagerB3();
-    return;
   }
-  const wordKeys = getGroupWordKeysB3(group);
-  const exclusiveWordKeys = wordKeys.filter((wordKey) => (
-    (report.index.groupIdsByWordKey.get(wordKey)?.size ?? 0) <= 1
-  ));
-  if (exclusiveWordKeys.length > 0) {
-    setCategoryManagerNotice(
-      `该分类包含 ${exclusiveWordKeys.length} 个仅属于本分类的词条，当前版本不能删除以避免全局删词。`,
-      "error"
-    );
-    renderCategoryTreeManagerB3();
-    return;
-  }
-  if (appState.practice.activeQuestion?.optionGroupIds.includes(groupId)) {
-    setCategoryManagerNotice("当前题正在使用该分类，请先完成当前题。", "error");
-    renderCategoryTreeManagerB3();
-    return;
-  }
-  const multiCount = wordKeys.length;
-  const message = multiCount > 0
-    ? `确定删除分类“${group.category}”？其中 ${multiCount} 个多分类词将只移除本分类关系。`
-    : `确定删除空分类“${group.category}”？`;
-  openVocabularyDeleteConfirmationB3({
-    title: "删除分类？",
-    message,
-    confirmLabel: "确认删除",
-    action: () => performDeleteCategoryB3(groupId, group, wordKeys)
+}
+
+function createCategoryDeletionB3(groupId) {
+  return deleteCategory(currentVocabulary, groupId, {
+    protectedGroupIds: appState.practice.activeQuestion?.optionGroupIds ?? []
   });
 }
 
-function performDeleteCategoryB3(groupId, group, wordKeys) {
+function performDeleteCategoryB3(groupId) {
   try {
-    let candidate = currentVocabulary;
-    for (const wordKey of wordKeys) {
-      const groupIds = [...report.index.groupIdsByWordKey.get(wordKey)].filter((item) => item !== groupId);
-      candidate = editVocabularyWord(
-        candidate,
-        wordKey,
-        report.index.displayByWordKey.get(wordKey),
-        groupIds
-      ).vocabulary;
-    }
-    candidate = {
-      ...candidate,
-      vocabulary_list: candidate.vocabulary_list.filter((item) => item.group_id !== groupId)
-    };
-    if (!saveVocabularyCandidate(candidate)) {
+    const deletion = createCategoryDeletionB3(groupId);
+    if (!saveVocabularyCandidate(deletion.vocabulary)) {
       renderCategoryTreeManagerB3();
       return;
     }
     expandedManagerGroupIds.delete(groupId);
     editingCategoryGroupId = null;
-    setCategoryManagerNotice(`已删除分类“${group.category}”。`, "success");
+    setCategoryManagerNotice(`已删除分类“${deletion.group.category}”。`, "success");
   } catch (error) {
     setCategoryManagerNotice(error.message, "error");
   }

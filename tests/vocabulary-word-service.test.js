@@ -4,8 +4,10 @@ import {
   addVocabularyWord,
   createWordManagementEntries,
   editVocabularyWord,
-  filterWordManagementEntries
+  filterWordManagementEntries,
+  removeVocabularyWordRelation
 } from "../js/core/vocabulary-word-service.js";
+import { createCategoryList } from "../js/core/vocabulary-category-service.js";
 import { createVocabularyIndex } from "../js/core/vocabulary-index.js";
 import { createQuestion } from "../js/core/question-engine.js";
 import { createDefaultAppState } from "../js/core/storage.js";
@@ -184,4 +186,100 @@ test("an edited word survives repository reload", () => {
 
   assert.equal(index.displayByWordKey.get("sustain"), "Sustain");
   assert.deepEqual([...index.groupIdsByWordKey.get("sustain")], [1, 2]);
+});
+
+test("removing one relation from a multi-category word succeeds", () => {
+  const source = {
+    vocabulary_list: [
+      { group_id: 1, category: "保持", words: ["sustain"] },
+      { group_id: 2, category: "支持", words: ["sustain", "support"] }
+    ]
+  };
+
+  const result = removeVocabularyWordRelation(source, "sustain", 1);
+
+  assert.deepEqual(result.word, {
+    wordKey: "sustain",
+    displayText: "sustain",
+    removedGroupId: 1,
+    remainingGroupIds: [2]
+  });
+  assert.deepEqual(result.vocabulary.vocabulary_list[0].words, []);
+  assert.deepEqual(source.vocabulary_list[0].words, ["sustain"]);
+});
+
+test("removing the last category relation is rejected", () => {
+  assert.throws(
+    () => removeVocabularyWordRelation(vocabulary, "sustain", 1),
+    /该词条目前只有一个分类。如删除将导致词条从词库消失。当前版本请先将词条加入其他分类后再删除。/
+  );
+});
+
+test("a word remains visible in its other category after relation removal", () => {
+  const source = {
+    vocabulary_list: [
+      { group_id: 1, category: "保持", words: ["sustain"] },
+      { group_id: 2, category: "支持", words: ["sustain"] }
+    ]
+  };
+  const result = removeVocabularyWordRelation(source, "sustain", 1);
+  const index = createVocabularyIndex(result.vocabulary.vocabulary_list);
+
+  assert.equal(index.displayByWordKey.get("sustain"), "sustain");
+  assert.deepEqual([...index.groupIdsByWordKey.get("sustain")], [2]);
+  assert.equal(index.groupById.get(2).words.includes("sustain"), true);
+});
+
+test("relation removal leaves learning, review queue, and round history unchanged", () => {
+  const source = {
+    vocabulary_list: [
+      { group_id: 1, category: "保持", words: ["sustain"] },
+      { group_id: 2, category: "支持", words: ["sustain"] }
+    ]
+  };
+  const state = createDefaultAppState();
+  state.learning.byWordKey.sustain = {
+    status: "review",
+    correctCount: 2,
+    errorCount: 3,
+    answerCount: 5
+  };
+  state.practice.reviewQueue = [{
+    wordKey: "sustain",
+    scope: "free",
+    roundId: null,
+    scheduledAtAttempt: 1,
+    dueAfterAttempt: 7,
+    delay: 6
+  }];
+  state.rounds.lastCompletedSummary = { roundId: "round-old", totalWords: 20 };
+  const snapshot = structuredClone(state);
+
+  removeVocabularyWordRelation(source, "sustain", 1);
+
+  assert.deepEqual(state, snapshot);
+});
+
+test("the active question word is protected before the last-relation check", () => {
+  assert.throws(
+    () => removeVocabularyWordRelation(vocabulary, "sustain", 1, {
+      protectedWordKeys: ["sustain"]
+    }),
+    /当前题正在使用该词条，暂时无法修改。/
+  );
+});
+
+test("relation removal updates the category word count", () => {
+  const source = {
+    vocabulary_list: [
+      { group_id: 1, category: "保持", words: ["sustain", "keep"] },
+      { group_id: 2, category: "支持", words: ["sustain"] }
+    ]
+  };
+  const before = createCategoryList(source).find(({ groupId }) => groupId === 1);
+  const result = removeVocabularyWordRelation(source, "sustain", 1);
+  const after = createCategoryList(result.vocabulary).find(({ groupId }) => groupId === 1);
+
+  assert.equal(before.wordCount, 2);
+  assert.equal(after.wordCount, 1);
 });

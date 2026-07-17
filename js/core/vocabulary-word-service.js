@@ -92,6 +92,71 @@ export function editVocabularyWord(vocabulary, wordKeyValue, displayValue, group
   };
 }
 
+export function removeVocabularyWordRelation(
+  vocabulary,
+  wordKeyValue,
+  groupId,
+  { protectedWordKeys = [] } = {}
+) {
+  const vocabularyList = getVocabularyList(vocabulary);
+  const wordKey = normalizeWordKey(wordKeyValue);
+  const group = vocabularyList.find((item) => item?.group_id === groupId);
+  if (!group) {
+    throw new RangeError("没有找到需要修改的分类。");
+  }
+
+  const sourceWord = (Array.isArray(group.words) ? group.words : [])
+    .find((word) => normalizeWordKey(word) === wordKey);
+  if (!wordKey || sourceWord === undefined) {
+    throw new RangeError("该词条不属于当前分类。");
+  }
+
+  const protectedKeys = new Set(
+    (Array.isArray(protectedWordKeys) ? protectedWordKeys : [])
+      .map(normalizeWordKey)
+      .filter(Boolean)
+  );
+  if (protectedKeys.has(wordKey)) {
+    throw new RangeError("当前题正在使用该词条，暂时无法修改。");
+  }
+
+  const currentGroupIds = vocabularyList
+    .filter((item) => (
+      Array.isArray(item?.words) &&
+      item.words.some((word) => normalizeWordKey(word) === wordKey)
+    ))
+    .map((item) => item.group_id);
+  if (currentGroupIds.length <= 1) {
+    throw new RangeError(
+      "该词条目前只有一个分类。如删除将导致词条从词库消失。当前版本请先将词条加入其他分类后再删除。"
+    );
+  }
+
+  const remainingGroupIds = currentGroupIds.filter((item) => item !== groupId);
+  return {
+    vocabulary: clonePlain({
+      ...vocabulary,
+      vocabulary_list: vocabularyList.map((item) => item?.group_id === groupId
+        ? {
+            ...item,
+            words: item.words.filter((word) => normalizeWordKey(word) !== wordKey)
+          }
+        : item
+      )
+    }),
+    word: {
+      wordKey,
+      displayText: sourceWord,
+      removedGroupId: groupId,
+      remainingGroupIds
+    },
+    category: {
+      groupId,
+      category: group.category
+    }
+  };
+}
+
 export function createWordManagementEntries(index, learning) {
   if (!index?.allWordKeys || !index?.displayByWordKey || !index?.groupIdsByWordKey || !index?.groupById) {
     throw new TypeError("必须提供有效的 vocabulary index。");

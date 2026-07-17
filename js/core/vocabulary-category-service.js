@@ -51,6 +51,42 @@ export function renameCategory(vocabulary, groupId, categoryName) {
   };
 }
 
+export function deleteCategory(vocabulary, groupId, { protectedGroupIds = [] } = {}) {
+  const vocabularyList = getVocabularyList(vocabulary);
+  const group = vocabularyList.find((item) => item?.group_id === groupId);
+  if (!group) {
+    throw new RangeError("没有找到需要删除的分类。");
+  }
+
+  const protectedIds = new Set(
+    Array.isArray(protectedGroupIds) ? protectedGroupIds : []
+  );
+  if (protectedIds.has(groupId)) {
+    throw new RangeError("当前题正在使用该分类，暂时无法删除。");
+  }
+
+  const relationCounts = createWordRelationCounts(vocabularyList);
+  const wordKeys = [...new Set(
+    (Array.isArray(group.words) ? group.words : [])
+      .map(normalizeWordKey)
+      .filter(Boolean)
+  )];
+  if (wordKeys.some((wordKey) => (relationCounts.get(wordKey) ?? 0) <= 1)) {
+    throw new RangeError(
+      "该分类包含只能属于此分类的词条。请先删除这些词条或将它们加入其他分类。"
+    );
+  }
+
+  return {
+    vocabulary: clonePlain({
+      ...vocabulary,
+      vocabulary_list: vocabularyList.filter((item) => item?.group_id !== groupId)
+    }),
+    group: clonePlain(group),
+    removedRelationCount: wordKeys.length
+  };
+}
+
 function requireAvailableCategoryName(vocabularyList, value, excludedGroupId = null) {
   const category = normalizeCategoryName(value);
   if (!category) {
@@ -72,6 +108,21 @@ function getVocabularyList(vocabulary) {
     throw new TypeError("词库必须包含 vocabulary_list 数组。");
   }
   return vocabulary.vocabulary_list;
+}
+
+function createWordRelationCounts(vocabularyList) {
+  const counts = new Map();
+  for (const group of vocabularyList) {
+    const groupWordKeys = new Set(
+      (Array.isArray(group?.words) ? group.words : [])
+        .map(normalizeWordKey)
+        .filter(Boolean)
+    );
+    for (const wordKey of groupWordKeys) {
+      counts.set(wordKey, (counts.get(wordKey) ?? 0) + 1);
+    }
+  }
+  return counts;
 }
 
 function clonePlain(value) {

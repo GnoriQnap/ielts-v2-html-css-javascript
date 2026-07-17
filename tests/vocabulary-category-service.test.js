@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   addCategory,
   createCategoryList,
+  deleteCategory,
   renameCategory
 } from "../js/core/vocabulary-category-service.js";
 import { createVocabularyIndex } from "../js/core/vocabulary-index.js";
@@ -114,4 +115,96 @@ test("renamed categories flow through questions and wordbook without changing le
   );
   assert.equal(idea.categories[0].category, "表达观点");
   assert.deepEqual(learning, learningSnapshot);
+});
+
+test("deleting an empty category succeeds", () => {
+  const source = {
+    vocabulary_list: [
+      { group_id: 1, category: "空分类", words: [] },
+      { group_id: 2, category: "保留", words: ["keep"] }
+    ]
+  };
+
+  const result = deleteCategory(source, 1);
+
+  assert.equal(result.removedRelationCount, 0);
+  assert.deepEqual(result.vocabulary.vocabulary_list, [source.vocabulary_list[1]]);
+  assert.equal(source.vocabulary_list.length, 2);
+});
+
+test("deleting a category made only of multi-category words succeeds", () => {
+  const source = {
+    vocabulary_list: [
+      { group_id: 1, category: "待删除", words: ["hello", "shared"] },
+      { group_id: 2, category: "问候", words: ["hello"] },
+      { group_id: 3, category: "共享", words: ["shared"] }
+    ]
+  };
+
+  const result = deleteCategory(source, 1);
+
+  assert.equal(result.removedRelationCount, 2);
+  assert.equal(result.vocabulary.vocabulary_list.some(({ group_id }) => group_id === 1), false);
+});
+
+test("deleting a category containing a single-category word is rejected", () => {
+  const source = {
+    vocabulary_list: [
+      { group_id: 1, category: "独有", words: ["only-here", "shared"] },
+      { group_id: 2, category: "其他", words: ["shared"] }
+    ]
+  };
+
+  assert.throws(
+    () => deleteCategory(source, 1),
+    /该分类包含只能属于此分类的词条。请先删除这些词条或将它们加入其他分类。/
+  );
+});
+
+test("multi-category words remain after one category is deleted", () => {
+  const source = {
+    vocabulary_list: [
+      { group_id: 1, category: "待删除", words: ["hello"] },
+      { group_id: 2, category: "保留", words: ["hello", "stay"] }
+    ]
+  };
+
+  const result = deleteCategory(source, 1);
+  const index = createVocabularyIndex(result.vocabulary.vocabulary_list);
+
+  assert.equal(index.displayByWordKey.get("hello"), "hello");
+  assert.deepEqual([...index.groupIdsByWordKey.get("hello")], [2]);
+});
+
+test("deleting a category does not change learning state", () => {
+  const source = {
+    vocabulary_list: [
+      { group_id: 1, category: "待删除", words: ["hello"] },
+      { group_id: 2, category: "保留", words: ["hello"] }
+    ]
+  };
+  const learning = {
+    byWordKey: {
+      hello: { status: "review", correctCount: 2, errorCount: 3, answerCount: 5 }
+    }
+  };
+  const snapshot = structuredClone(learning);
+
+  deleteCategory(source, 1);
+
+  assert.deepEqual(learning, snapshot);
+});
+
+test("a category used by the active question is protected before other checks", () => {
+  const source = {
+    vocabulary_list: [
+      { group_id: 1, category: "当前题分类", words: ["only-here"] },
+      { group_id: 2, category: "其他", words: ["other"] }
+    ]
+  };
+
+  assert.throws(
+    () => deleteCategory(source, 1, { protectedGroupIds: [1] }),
+    /当前题正在使用该分类，暂时无法删除。/
+  );
 });
