@@ -63,7 +63,7 @@ export function editVocabularyWord(vocabulary, wordKeyValue, displayValue, group
   if (!displayText) {
     throw new RangeError("英文词条不能为空。");
   }
-  if (normalizeWordKey(displayText) !== wordKey) {
+  if (detectWordIdentityChange(wordKey, displayText).changed) {
     throw new RangeError("当前版本不支持修改词条唯一标识。");
   }
 
@@ -89,6 +89,17 @@ export function editVocabularyWord(vocabulary, wordKeyValue, displayValue, group
       displayText,
       groupIds: selectedGroupIds
     }
+  };
+}
+
+export function detectWordIdentityChange(wordKeyValue, displayValue) {
+  const oldWordKey = normalizeWordKey(wordKeyValue);
+  const newWordKey = normalizeWordKey(normalizeDisplayText(displayValue));
+
+  return {
+    changed: oldWordKey !== newWordKey,
+    oldWordKey,
+    newWordKey
   };
 }
 

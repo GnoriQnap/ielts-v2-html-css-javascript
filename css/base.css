@@ -788,6 +788,7 @@ h1, h2, p { margin-top: 0; }
 .category-create-word-row strong { color: #526175; text-align: right; }
 .category-create-actions { display: flex; grid-column: 1 / -1; justify-content: flex-end; gap: 8px; }
 .category-manager-toolbar { padding: 16px 28px; border-bottom: 1px solid #e7ebef; }
+#category-manager-notice { white-space: pre-line; }
 .category-manager-toolbar .wordbook-search { max-width: 620px; }
 .category-tree-item { border-bottom: 1px solid #e7ebef; background: #fff; }
 .category-tree-item:last-child { border-bottom: 0; }

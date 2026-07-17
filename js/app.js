@@ -22,9 +22,10 @@ import {
 import {
   addVocabularyWord,
   createWordManagementEntries,
+  detectWordIdentityChange,
   editVocabularyWord,
   removeVocabularyWordRelation
-} from "./core/vocabulary-word-service.js?v=7.2c2";
+} from "./core/vocabulary-word-service.js?v=7.2c3a";
 import { normalizeWordKey } from "./core/normalization.js";
 import {
   PRACTICE_MODES,
@@ -1251,6 +1252,21 @@ function renameCategoryFromTreeB3(groupId, value) {
 
 function editCategoryWordFromTreeB3(wordKey, value) {
   try {
+    const identityChange = detectWordIdentityChange(wordKey, value);
+    if (identityChange.newWordKey && identityChange.changed) {
+      setCategoryManagerNotice(
+        [
+          "当前修改会改变词条唯一标识。",
+          `旧标识：${identityChange.oldWordKey}`,
+          `新标识：${identityChange.newWordKey}`,
+          "当前版本暂不支持直接修改词条身份。",
+          "请保持原词条名称。"
+        ].join("\n"),
+        "error"
+      );
+      renderCategoryTreeManagerB3();
+      return;
+    }
     const groupIds = [...(report.index.groupIdsByWordKey.get(wordKey) ?? [])];
     const result = editVocabularyWord(currentVocabulary, wordKey, value, groupIds);
     if (!saveVocabularyCandidate(result.vocabulary)) {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   addVocabularyWord,
   createWordManagementEntries,
+  detectWordIdentityChange,
   editVocabularyWord,
   filterWordManagementEntries,
   removeVocabularyWordRelation
@@ -282,4 +283,57 @@ test("relation removal updates the category word count", () => {
 
   assert.equal(before.wordCount, 2);
   assert.equal(after.wordCount, 1);
+});
+
+test("display text can change while its normalized wordKey stays the same", () => {
+  const detection = detectWordIdentityChange("thought", "  Thought  ");
+  const result = editVocabularyWord(vocabulary, "sustain", "Sustain", [1]);
+
+  assert.deepEqual(detection, {
+    changed: false,
+    oldWordKey: "thought",
+    newWordKey: "thought"
+  });
+  assert.equal(result.word.displayText, "Sustain");
+  assert.equal(result.word.wordKey, "sustain");
+});
+
+test("display text that creates a different wordKey is detected", () => {
+  assert.deepEqual(detectWordIdentityChange("idea", "ideal"), {
+    changed: true,
+    oldWordKey: "idea",
+    newWordKey: "ideal"
+  });
+});
+
+test("an identity-changing edit is blocked without changing the vocabulary", () => {
+  const source = {
+    vocabulary_list: [
+      { group_id: 1, category: "观点", words: ["idea"] }
+    ]
+  };
+  const snapshot = structuredClone(source);
+
+  assert.throws(
+    () => editVocabularyWord(source, "idea", "ideal", [1]),
+    /当前版本不支持修改词条唯一标识。/
+  );
+  assert.deepEqual(source, snapshot);
+});
+
+test("a blocked identity-changing edit leaves learning state unchanged", () => {
+  const source = {
+    vocabulary_list: [
+      { group_id: 1, category: "观点", words: ["idea"] }
+    ]
+  };
+  const learning = {
+    byWordKey: {
+      idea: { status: "review", correctCount: 2, errorCount: 1, answerCount: 3 }
+    }
+  };
+  const snapshot = structuredClone(learning);
+
+  assert.throws(() => editVocabularyWord(source, "idea", "ideal", [1]));
+  assert.deepEqual(learning, snapshot);
 });
