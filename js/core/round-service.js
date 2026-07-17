@@ -159,6 +159,23 @@ export function applyRoundDecision(round, wordKey, status) {
   });
 }
 
+export function syncRoundWordLearningStatus(round, wordKey, status) {
+  if (!round?.wordKeys.includes(wordKey)) {
+    return round;
+  }
+  if (!Object.values(LEARNING_STATUSES).includes(status)) {
+    throw new RangeError("学习状态必须是 new、review 或 remembered。");
+  }
+
+  const progress = assertRoundWord(round, wordKey);
+  const mastered = status === LEARNING_STATUSES.REMEMBERED;
+  return updateProgress(round, wordKey, {
+    ...progress,
+    mastered,
+    masteredViaExternalChange: mastered
+  });
+}
+
 export function getRoundEligibleWordKeys(round, learning, mode) {
   if (!round) {
     return [];

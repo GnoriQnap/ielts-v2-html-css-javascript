@@ -32,11 +32,24 @@ import {
   createHomeDashboardModel,
   shouldShowCompletionModal
 } from "./ui/home-dashboard.js?v=5.9";
+import {
+  applyWordbookStatusChange,
+  createWordbookCategoryTree,
+  createWordbookEntries,
+  filterWordbookEntries,
+  hasWordDetails,
+  WORDBOOK_FILTERS
+} from "./core/wordbook-service.js?v=6.0";
 
 const report = validateVocabularyData(vocabularyData);
 const elements = {
   siteHeader: document.querySelector("#site-header"),
   practiceMain: document.querySelector("#practice-main"),
+  wordbookMain: document.querySelector("#wordbook-main"),
+  homeLink: document.querySelector("#home-link"),
+  practiceNav: document.querySelector("#practice-nav"),
+  startRoundNav: document.querySelector(".nav-start-round"),
+  wordbookNav: document.querySelector("#wordbook-nav"),
   type: document.querySelector("#question-type"),
   word: document.querySelector("#word-heading"),
   prompt: document.querySelector("#question-prompt"),
@@ -75,7 +88,19 @@ const elements = {
   overallProgressBar: document.querySelector("#overall-progress-bar"),
   reviewCountStat: document.querySelector("#review-count-stat"),
   reviewRanking: document.querySelector("#review-ranking"),
-  reviewRankingEmpty: document.querySelector("#review-ranking-empty")
+  reviewRankingEmpty: document.querySelector("#review-ranking-empty"),
+  wordbookBack: document.querySelector("#wordbook-back"),
+  wordbookSearch: document.querySelector("#wordbook-search"),
+  clearWordbookSearch: document.querySelector("#clear-wordbook-search"),
+  wordbookFilters: document.querySelector("#wordbook-filters"),
+  wordbookResultCount: document.querySelector("#wordbook-result-count"),
+  wordbookNotice: document.querySelector("#wordbook-notice"),
+  wordbookList: document.querySelector("#wordbook-list"),
+  wordbookEmpty: document.querySelector("#wordbook-empty"),
+  wordDetailModal: document.querySelector("#word-detail-modal"),
+  wordDetailTitle: document.querySelector("#word-detail-title"),
+  wordDetailContent: document.querySelector("#word-detail-content"),
+  closeWordDetail: document.querySelector("#close-word-detail")
 };
 
 let appState = null;
@@ -83,13 +108,24 @@ let persistenceError = "";
 let dismissedCompletionRoundId = null;
 let completionWasOpen = false;
 let isAbandonConfirmationOpen = false;
+let isWordbookOpen = false;
+let wordbookFilter = WORDBOOK_FILTERS.ALL;
+let wordbookQuery = "";
+let wordbookNotice = "";
+const expandedWordbookGroupIds = new Set();
 
 elements.submit.addEventListener("click", submitAnswer);
 elements.markReview.addEventListener("click", () => chooseMasteryStatus(LEARNING_STATUSES.REVIEW));
 elements.markRemembered.addEventListener("click", () => chooseMasteryStatus(LEARNING_STATUSES.REMEMBERED));
 elements.next.addEventListener("click", showNextQuestion);
-elements.modeRandom.addEventListener("click", () => changeMode(PRACTICE_MODES.RANDOM));
-elements.modeIntensive.addEventListener("click", () => changeMode(PRACTICE_MODES.INTENSIVE));
+elements.modeRandom.addEventListener("click", () => {
+  openPracticeView();
+  changeMode(PRACTICE_MODES.RANDOM);
+});
+elements.modeIntensive.addEventListener("click", () => {
+  openPracticeView();
+  changeMode(PRACTICE_MODES.INTENSIVE);
+});
 elements.roundSize.addEventListener("change", handleRoundSizeChange);
 elements.customRoundSize.addEventListener("input", handleRoundSizeChange);
 elements.startRound.addEventListener("click", startNewRound);
@@ -98,6 +134,18 @@ elements.cancelAbandon.addEventListener("click", closeAbandonConfirmation);
 elements.confirmAbandon.addEventListener("click", confirmAbandonCurrentRound);
 elements.startNextRound.addEventListener("click", startNextRoundFromCompletion);
 elements.completionIntensive.addEventListener("click", openCompletionIntensive);
+elements.homeLink.addEventListener("click", openPracticeFromLink);
+elements.practiceNav.addEventListener("click", openPracticeFromLink);
+elements.startRoundNav.addEventListener("click", () => openPracticeView());
+elements.wordbookNav.addEventListener("click", openWordbookView);
+elements.wordbookBack.addEventListener("click", openPracticeView);
+elements.wordbookSearch.addEventListener("input", handleWordbookSearch);
+elements.clearWordbookSearch.addEventListener("click", clearWordbookSearch);
+elements.wordbookFilters.addEventListener("click", handleWordbookFilter);
+elements.wordbookList.addEventListener("click", handleWordbookListClick);
+elements.closeWordDetail.addEventListener("click", closeWordDetail);
+window.addEventListener("popstate", renderViewFromLocation);
+window.addEventListener("hashchange", renderViewFromLocation);
 
 if (report.isValid) {
   appState = loadAppState({
@@ -118,6 +166,7 @@ if (report.isValid) {
     replaceActiveQuestion();
   }
   renderActiveQuestion();
+  renderViewFromLocation();
 } else {
   showFatalError(report.errors.map((item) => item.message).join(" "));
 }
@@ -604,6 +653,7 @@ function confirmAbandonCurrentRound() {
 
 function startNextRoundFromCompletion() {
   dismissedCompletionRoundId = appState.rounds.lastCompletedSummary?.roundId ?? null;
+  openPracticeView();
   enterNextRoundPreparation();
 }
 
@@ -645,6 +695,7 @@ function enterNextRoundPreparation() {
 
 function openCompletionIntensive() {
   dismissedCompletionRoundId = appState.rounds.lastCompletedSummary?.roundId ?? null;
+  openPracticeView();
   changeMode(PRACTICE_MODES.INTENSIVE);
   renderRoundControls();
 }
@@ -698,12 +749,15 @@ function renderRoundControls() {
   const isModalOpen = showCompletion || isAbandonConfirmationOpen;
   elements.siteHeader.toggleAttribute("inert", isModalOpen);
   elements.practiceMain.toggleAttribute("inert", isModalOpen);
+  elements.wordbookMain.toggleAttribute("inert", isModalOpen);
   if (isModalOpen) {
     elements.siteHeader.setAttribute("aria-hidden", "true");
     elements.practiceMain.setAttribute("aria-hidden", "true");
+    elements.wordbookMain.setAttribute("aria-hidden", "true");
   } else {
     elements.siteHeader.removeAttribute("aria-hidden");
     elements.practiceMain.removeAttribute("aria-hidden");
+    elements.wordbookMain.removeAttribute("aria-hidden");
   }
   document.body.classList.toggle("modal-open", isModalOpen);
   elements.roundSummary.hidden = true;
@@ -807,6 +861,334 @@ function renderDashboard() {
   }
   elements.reviewRankingEmpty.hidden = model.topReviewWords.length > 0;
   elements.reviewRanking.hidden = model.topReviewWords.length === 0;
+}
+
+function openPracticeFromLink(event) {
+  event.preventDefault();
+  openPracticeView();
+  elements.word.focus();
+}
+
+function openPracticeView(updateRoute = true) {
+  isWordbookOpen = false;
+  elements.practiceMain.hidden = false;
+  elements.wordbookMain.hidden = true;
+  elements.practiceNav.classList.add("nav-link-current");
+  elements.wordbookNav.classList.remove("nav-link-current");
+  if (updateRoute && window.location.hash === "#wordbook") {
+    updateViewRoute("#practice-card");
+  }
+}
+
+function openWordbookView(updateRoute = true) {
+  isWordbookOpen = true;
+  elements.practiceMain.hidden = true;
+  elements.wordbookMain.hidden = false;
+  elements.practiceNav.classList.remove("nav-link-current");
+  elements.wordbookNav.classList.add("nav-link-current");
+  if (updateRoute && window.location.hash !== "#wordbook") {
+    updateViewRoute("#wordbook");
+  }
+  renderWordbook();
+}
+
+function renderViewFromLocation() {
+  if (window.location.hash === "#wordbook") {
+    openWordbookView(false);
+  } else {
+    openPracticeView(false);
+  }
+}
+
+function updateViewRoute(hash) {
+  window.history.pushState(
+    null,
+    "",
+    `${window.location.pathname}${window.location.search}${hash}`
+  );
+}
+
+function handleWordbookSearch(event) {
+  wordbookQuery = event.target.value;
+  wordbookNotice = "";
+  renderWordbook();
+}
+
+function clearWordbookSearch() {
+  elements.wordbookSearch.value = "";
+  wordbookQuery = "";
+  wordbookNotice = "";
+  renderWordbook();
+  elements.wordbookSearch.focus();
+}
+
+function handleWordbookFilter(event) {
+  const button = event.target.closest("[data-filter]");
+  if (!button || !elements.wordbookFilters.contains(button)) {
+    return;
+  }
+  wordbookFilter = button.dataset.filter;
+  wordbookNotice = "";
+  renderWordbook();
+}
+
+function renderWordbook() {
+  const annotations = vocabularyData.word_details ?? vocabularyData.wordDetails ?? {};
+  const entries = createWordbookEntries(report.index, appState.learning, annotations);
+  const isCategoryTree = wordbookFilter === WORDBOOK_FILTERS.ALL && !wordbookQuery.trim();
+  elements.clearWordbookSearch.hidden = !wordbookQuery;
+  if (isCategoryTree) {
+    const categoryTree = createWordbookCategoryTree(report.index, appState.learning, annotations);
+    renderWordbookCategoryTree(categoryTree);
+    elements.wordbookResultCount.textContent = `${categoryTree.length} 个分类`;
+    elements.wordbookEmpty.hidden = categoryTree.length > 0;
+    elements.wordbookList.hidden = categoryTree.length === 0;
+    renderWordbookFilterState();
+    return;
+  }
+
+  const visibleEntries = filterWordbookEntries(entries, {
+    filter: wordbookFilter,
+    query: wordbookQuery
+  });
+  const fragment = document.createDocumentFragment();
+
+  for (const entry of visibleEntries) {
+    const nextStatus = wordbookFilter === WORDBOOK_FILTERS.REVIEW
+      ? LEARNING_STATUSES.REMEMBERED
+      : wordbookFilter === WORDBOOK_FILTERS.REMEMBERED
+        ? LEARNING_STATUSES.REVIEW
+        : null;
+    fragment.append(createWordbookRow(entry, {
+      nextStatus,
+      compactSearchResult: Boolean(wordbookQuery.trim())
+    }));
+  }
+
+  elements.wordbookList.replaceChildren(fragment);
+  elements.wordbookResultCount.textContent = `${visibleEntries.length} 个词条`;
+  elements.wordbookNotice.textContent = wordbookNotice;
+  elements.wordbookEmpty.hidden = visibleEntries.length > 0;
+  elements.wordbookList.hidden = visibleEntries.length === 0;
+  renderWordbookFilterState();
+}
+
+function renderWordbookCategoryTree(categoryTree) {
+  const fragment = document.createDocumentFragment();
+  for (const group of categoryTree) {
+    const section = document.createElement("section");
+    const toggle = document.createElement("button");
+    const arrow = document.createElement("span");
+    const name = document.createElement("strong");
+    const count = document.createElement("span");
+    const isExpanded = expandedWordbookGroupIds.has(group.groupId);
+
+    section.className = "wordbook-category-node";
+    toggle.type = "button";
+    toggle.className = "wordbook-category-toggle";
+    toggle.dataset.categoryGroupId = String(group.groupId);
+    toggle.setAttribute("aria-expanded", String(isExpanded));
+    arrow.className = "wordbook-category-arrow";
+    arrow.textContent = "▶";
+    name.textContent = group.category;
+    count.textContent = `${group.words.length} 个词`;
+    toggle.append(arrow, name, count);
+    section.append(toggle);
+
+    if (isExpanded) {
+      const words = document.createElement("div");
+      words.className = "wordbook-category-words";
+      for (const entry of group.words) {
+        words.append(createWordbookRow(entry, {
+          categories: [group.category],
+          nextStatus: null
+        }));
+      }
+      section.append(words);
+    }
+    fragment.append(section);
+  }
+  elements.wordbookList.replaceChildren(fragment);
+  elements.wordbookNotice.textContent = wordbookNotice;
+}
+
+function createWordbookRow(entry, options = {}) {
+  const row = document.createElement("article");
+  const identity = document.createElement("div");
+  const word = document.createElement("strong");
+  const detailButton = document.createElement("button");
+  const categories = document.createElement("div");
+  const statusCell = document.createElement("div");
+  const statusBadge = document.createElement("span");
+  const categoryNames = options.categories ?? entry.categories.map(({ category }) => category);
+
+  row.className = "wordbook-row";
+  row.classList.toggle("wordbook-row-action", Boolean(options.nextStatus));
+  row.classList.toggle("wordbook-row-search", Boolean(options.compactSearchResult));
+  row.dataset.wordKey = entry.wordKey;
+  identity.className = "wordbook-word";
+  word.textContent = entry.displayText;
+  detailButton.type = "button";
+  detailButton.className = "word-detail-trigger";
+  detailButton.dataset.detailWordKey = entry.wordKey;
+  detailButton.textContent = "查看注释";
+  identity.append(word, detailButton);
+
+  categories.className = "wordbook-categories";
+  categories.setAttribute("aria-label", "所属分类");
+  for (const category of categoryNames) {
+    const categoryElement = document.createElement("span");
+    categoryElement.className = "wordbook-category";
+    categoryElement.textContent = category;
+    categories.append(categoryElement);
+  }
+
+  statusCell.className = "wordbook-status-cell";
+  statusBadge.className = "wordbook-status-badge";
+  statusBadge.dataset.status = entry.status;
+  statusBadge.textContent = statusLabel(entry.status);
+  if (!options.nextStatus) {
+    statusCell.append(statusBadge);
+  } else {
+    const action = document.createElement("button");
+    action.type = "button";
+    action.className = "button button-compact wordbook-status-action";
+    action.dataset.statusWordKey = entry.wordKey;
+    action.dataset.nextStatus = options.nextStatus;
+    action.textContent = options.nextStatus === LEARNING_STATUSES.REMEMBERED
+      ? "加入已记忆"
+      : "加入待强化";
+    statusCell.append(action);
+    if (entry.wordKey === appState.practice.activeQuestion?.wordKey) {
+      const currentNote = document.createElement("span");
+      currentNote.className = "wordbook-current-note";
+      currentNote.textContent = "当前题完成前不可修改";
+      statusCell.append(currentNote);
+    }
+  }
+
+  row.append(identity, categories, statusCell);
+  return row;
+}
+
+function renderWordbookFilterState() {
+  for (const button of elements.wordbookFilters.querySelectorAll("[data-filter]")) {
+    const isActive = button.dataset.filter === wordbookFilter;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  }
+}
+
+function handleWordbookStatusChange(wordKey, status) {
+  const result = applyWordbookStatusChange({
+    state: appState,
+    wordKey,
+    status,
+    changedAt: new Date().toISOString()
+  });
+  if (!result.applied) {
+    wordbookNotice = result.reason === "active-question"
+      ? "请先完成当前题。"
+      : "学习状态没有变化。";
+    renderWordbook();
+    return;
+  }
+
+  appState = result.state;
+  persistState();
+  wordbookNotice = persistenceError;
+  renderActiveQuestion();
+  if (isWordbookOpen) {
+    renderWordbook();
+  }
+}
+
+function handleWordbookListClick(event) {
+  const categoryToggle = event.target.closest("[data-category-group-id]");
+  if (categoryToggle && elements.wordbookList.contains(categoryToggle)) {
+    const groupId = Number(categoryToggle.dataset.categoryGroupId);
+    if (expandedWordbookGroupIds.has(groupId)) {
+      expandedWordbookGroupIds.delete(groupId);
+    } else {
+      expandedWordbookGroupIds.add(groupId);
+    }
+    renderWordbook();
+    return;
+  }
+
+  const statusAction = event.target.closest("[data-status-word-key]");
+  if (statusAction && elements.wordbookList.contains(statusAction)) {
+    handleWordbookStatusChange(
+      statusAction.dataset.statusWordKey,
+      statusAction.dataset.nextStatus
+    );
+    return;
+  }
+
+  const detailButton = event.target.closest("[data-detail-word-key]");
+  if (detailButton && elements.wordbookList.contains(detailButton)) {
+    openWordDetail(detailButton.dataset.detailWordKey);
+  }
+}
+
+function openWordDetail(wordKey) {
+  const annotations = vocabularyData.word_details ?? vocabularyData.wordDetails ?? {};
+  const entry = createWordbookEntries(report.index, appState.learning, annotations)
+    .find((item) => item.wordKey === wordKey);
+  if (!entry) {
+    return;
+  }
+
+  elements.wordDetailTitle.textContent = entry.displayText;
+  elements.wordDetailContent.replaceChildren();
+  if (!hasWordDetails(entry.details)) {
+    const empty = document.createElement("p");
+    empty.className = "word-detail-empty";
+    empty.textContent = "暂未添加单词注释";
+    elements.wordDetailContent.append(empty);
+  } else {
+    appendWordDetail("音标", entry.details.phonetic);
+    appendWordDetail("释义", entry.details.definition);
+    appendWordDetailList("常用搭配", entry.details.collocations);
+    appendWordDetailList("例句", entry.details.examples);
+  }
+  elements.wordDetailModal.hidden = false;
+  elements.siteHeader.setAttribute("inert", "");
+  elements.practiceMain.setAttribute("inert", "");
+  elements.wordbookMain.setAttribute("inert", "");
+  document.body.classList.add("modal-open");
+  elements.closeWordDetail.focus();
+}
+
+function appendWordDetail(title, value) {
+  if (!value) {
+    return;
+  }
+  const heading = document.createElement("h3");
+  const content = document.createElement("p");
+  heading.textContent = title;
+  content.textContent = value;
+  elements.wordDetailContent.append(heading, content);
+}
+
+function appendWordDetailList(title, values) {
+  if (!values.length) {
+    return;
+  }
+  const heading = document.createElement("h3");
+  const list = document.createElement("ul");
+  heading.textContent = title;
+  for (const value of values) {
+    const item = document.createElement("li");
+    item.textContent = value;
+    list.append(item);
+  }
+  elements.wordDetailContent.append(heading, list);
+}
+
+function closeWordDetail() {
+  elements.wordDetailModal.hidden = true;
+  renderRoundControls();
 }
 
 function persistState() {

@@ -10,15 +10,15 @@
   <body>
     <header id="site-header" class="topbar">
       <div class="topbar-inner">
-        <a class="brand" href="#practice-card" aria-label="IELTS 同义替换练习首页">
+        <a id="home-link" class="brand" href="#practice-card" aria-label="IELTS 同义替换练习首页">
           <span class="brand-mark" aria-hidden="true">I</span>
           <span>IELTS同义替换练习</span>
         </a>
 
         <nav class="primary-nav" aria-label="主要导航">
-          <a class="nav-link nav-link-current" href="#practice-card">当前学习</a>
+          <a id="practice-nav" class="nav-link nav-link-current" href="#practice-card">当前学习</a>
           <a class="nav-link nav-start-round" href="#round-panel">开始新一轮</a>
-          <button class="nav-link" type="button" disabled title="阶段 6 开放">单词本</button>
+          <button id="wordbook-nav" class="nav-link" type="button">单词本</button>
           <button class="nav-link" type="button" disabled title="阶段 7 开放">词库管理</button>
         </nav>
 
@@ -130,6 +130,41 @@
       </div>
     </main>
 
+    <main id="wordbook-main" class="wordbook-shell" hidden>
+      <section class="wordbook-panel" aria-labelledby="wordbook-title">
+        <header class="wordbook-header">
+          <div>
+            <span class="section-kicker">学习记录</span>
+            <h1 id="wordbook-title">单词本</h1>
+            <p>查看词条分类，并管理你的学习状态。</p>
+          </div>
+          <button id="wordbook-back" class="button button-quiet button-compact" type="button">返回学习</button>
+        </header>
+
+        <div class="wordbook-toolbar">
+          <label class="wordbook-search" for="wordbook-search">
+            <span>搜索单词或分类</span>
+            <span class="wordbook-search-field">
+              <input id="wordbook-search" type="search" placeholder="输入英文词条或中文分类" autocomplete="off">
+              <button id="clear-wordbook-search" class="wordbook-search-clear" type="button" aria-label="清空搜索" hidden>×</button>
+            </span>
+          </label>
+          <div id="wordbook-filters" class="wordbook-filters" role="group" aria-label="按学习状态筛选">
+            <button class="wordbook-filter active" type="button" data-filter="all" aria-pressed="true">全部</button>
+            <button class="wordbook-filter" type="button" data-filter="review" aria-pressed="false">待强化</button>
+            <button class="wordbook-filter" type="button" data-filter="remembered" aria-pressed="false">已记忆</button>
+          </div>
+        </div>
+
+        <div class="wordbook-list-heading">
+          <strong id="wordbook-result-count">0 个词条</strong>
+          <p id="wordbook-notice" role="status" aria-live="polite"></p>
+        </div>
+        <div id="wordbook-list" class="wordbook-list"></div>
+        <p id="wordbook-empty" class="wordbook-empty" hidden>没有找到匹配的词条。</p>
+      </section>
+    </main>
+
     <div
       id="completion-modal"
       class="completion-modal"
@@ -168,6 +203,22 @@
       </section>
     </div>
 
-    <script type="module" src="./js/app.js?v=5.16"></script>
+    <div
+      id="word-detail-modal"
+      class="completion-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="word-detail-title"
+      hidden
+    >
+      <section class="completion-card word-detail-card">
+        <button id="close-word-detail" class="word-detail-close" type="button" aria-label="关闭单词详情">×</button>
+        <span class="section-kicker">单词注释</span>
+        <h2 id="word-detail-title"></h2>
+        <div id="word-detail-content" class="word-detail-content"></div>
+      </section>
+    </div>
+
+    <script type="module" src="./js/app.js?v=6.1"></script>
   </body>
 </html>

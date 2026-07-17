@@ -7,7 +7,8 @@ import {
   createRound,
   getRoundEligibleWordKeys,
   markRoundWordShown,
-  recordRoundAnswer
+  recordRoundAnswer,
+  syncRoundWordLearningStatus
 } from "../js/core/round-service.js";
 import { selectPracticeWordKey } from "../js/core/review-scheduler.js";
 
@@ -238,4 +239,17 @@ test("the last unmastered word remains available after an error and completes on
   assert.equal(completed.rounds.current, null);
   assert.equal(completed.rounds.lastCompletedSummary.masteredCount, 20);
   assert.equal(round.attemptCount, 2);
+});
+
+test("external learning status changes synchronize active round mastery", () => {
+  let round = createSizedRound(20);
+  const wordKey = round.wordKeys[0];
+
+  round = syncRoundWordLearningStatus(round, wordKey, "remembered");
+  assert.equal(round.progressByWord[wordKey].mastered, true);
+  assert.equal(round.progressByWord[wordKey].masteredViaExternalChange, true);
+
+  round = syncRoundWordLearningStatus(round, wordKey, "review");
+  assert.equal(round.progressByWord[wordKey].mastered, false);
+  assert.equal(round.progressByWord[wordKey].masteredViaExternalChange, false);
 });

@@ -24,6 +24,44 @@ export function getLearningRecord(learning, wordKey) {
   };
 }
 
+export function setLearningStatus({
+  learning,
+  wordKey,
+  status,
+  activeQuestion = null,
+  changedAt = new Date().toISOString()
+}) {
+  if (!Object.values(LEARNING_STATUSES).includes(status)) {
+    throw new RangeError("学习状态必须是 new、review 或 remembered。");
+  }
+  if (activeQuestion?.wordKey === wordKey) {
+    return { learning, applied: false, reason: "active-question" };
+  }
+
+  const previousRecord = getLearningRecord(learning, wordKey);
+  if (previousRecord.status === status) {
+    return { learning, applied: false, reason: "unchanged" };
+  }
+
+  return {
+    learning: {
+      ...learning,
+      byWordKey: {
+        ...learning.byWordKey,
+        [wordKey]: {
+          ...previousRecord,
+          status,
+          reviewSince: status === LEARNING_STATUSES.REVIEW
+            ? previousRecord.reviewSince ?? changedAt
+            : null
+        }
+      }
+    },
+    applied: true,
+    reason: null
+  };
+}
+
 export function recordAnswer({ learning, activeQuestion, isCorrect, answeredAt }) {
   if (!activeQuestion || activeQuestion.phase !== "answering") {
     return { learning, activeQuestion, applied: false };

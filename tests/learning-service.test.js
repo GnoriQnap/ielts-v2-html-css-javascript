@@ -4,7 +4,8 @@ import {
   applyMasteryDecision,
   getLearningRecord,
   LEARNING_STATUSES,
-  recordAnswer
+  recordAnswer,
+  setLearningStatus
 } from "../js/core/learning-service.js";
 
 function createActiveQuestion() {
@@ -109,4 +110,33 @@ test("the same active question cannot increment statistics twice", () => {
   assert.equal(duplicate.applied, false);
   assert.equal(record.answerCount, 1);
   assert.equal(record.correctCount, 1);
+});
+
+test("manual status changes preserve statistics and block the active question", () => {
+  const learning = createLearning();
+  learning.byWordKey.critical = {
+    ...getLearningRecord(learning, "critical"),
+    correctCount: 2,
+    answerCount: 3
+  };
+  const changed = setLearningStatus({
+    learning,
+    wordKey: "critical",
+    status: LEARNING_STATUSES.REMEMBERED
+  });
+
+  assert.equal(changed.applied, true);
+  assert.equal(changed.learning.byWordKey.critical.status, LEARNING_STATUSES.REMEMBERED);
+  assert.equal(changed.learning.byWordKey.critical.correctCount, 2);
+  assert.equal(changed.learning.byWordKey.critical.answerCount, 3);
+
+  const blocked = setLearningStatus({
+    learning: changed.learning,
+    wordKey: "critical",
+    status: LEARNING_STATUSES.REVIEW,
+    activeQuestion: { wordKey: "critical" }
+  });
+  assert.equal(blocked.applied, false);
+  assert.equal(blocked.reason, "active-question");
+  assert.equal(blocked.learning.byWordKey.critical.status, LEARNING_STATUSES.REMEMBERED);
 });
