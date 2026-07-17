@@ -14,6 +14,11 @@ import {
 import { loadAppState, saveAppState, STORAGE_KEY } from "./core/storage.js?v=7.1";
 import { createVocabularyRepository } from "./core/vocabulary-repository.js?v=7.1";
 import {
+  addCategory,
+  createCategoryList,
+  renameCategory
+} from "./core/vocabulary-category-service.js?v=7.2a";
+import {
   PRACTICE_MODES,
   removeReviewItem,
   scheduleReview,
@@ -47,16 +52,18 @@ const vocabularyRepository = createVocabularyRepository({
   legacyStateKey: STORAGE_KEY
 });
 vocabularyRepository.load();
-const currentVocabulary = vocabularyRepository.getCurrentVocabulary();
-const report = validateVocabularyData(currentVocabulary);
+let currentVocabulary = vocabularyRepository.getCurrentVocabulary();
+let report = validateVocabularyData(currentVocabulary);
 const elements = {
   siteHeader: document.querySelector("#site-header"),
   practiceMain: document.querySelector("#practice-main"),
   wordbookMain: document.querySelector("#wordbook-main"),
+  vocabularyManagerMain: document.querySelector("#vocabulary-manager-main"),
   homeLink: document.querySelector("#home-link"),
   practiceNav: document.querySelector("#practice-nav"),
   startRoundNav: document.querySelector(".nav-start-round"),
   wordbookNav: document.querySelector("#wordbook-nav"),
+  vocabularyManagerNav: document.querySelector("#vocabulary-manager-nav"),
   type: document.querySelector("#question-type"),
   word: document.querySelector("#word-heading"),
   prompt: document.querySelector("#question-prompt"),
@@ -107,7 +114,13 @@ const elements = {
   wordDetailModal: document.querySelector("#word-detail-modal"),
   wordDetailTitle: document.querySelector("#word-detail-title"),
   wordDetailContent: document.querySelector("#word-detail-content"),
-  closeWordDetail: document.querySelector("#close-word-detail")
+  closeWordDetail: document.querySelector("#close-word-detail"),
+  vocabularyManagerBack: document.querySelector("#vocabulary-manager-back"),
+  addCategoryForm: document.querySelector("#add-category-form"),
+  newCategoryName: document.querySelector("#new-category-name"),
+  categoryManagerCount: document.querySelector("#category-manager-count"),
+  categoryManagerNotice: document.querySelector("#category-manager-notice"),
+  categoryManagerList: document.querySelector("#category-manager-list")
 };
 
 let appState = null;
@@ -120,6 +133,9 @@ let wordbookFilter = WORDBOOK_FILTERS.ALL;
 let wordbookQuery = "";
 let wordbookNotice = "";
 const expandedWordbookGroupIds = new Set();
+let editingCategoryGroupId = null;
+let categoryManagerNotice = "";
+let categoryManagerNoticeTone = "success";
 
 elements.submit.addEventListener("click", submitAnswer);
 elements.markReview.addEventListener("click", () => chooseMasteryStatus(LEARNING_STATUSES.REVIEW));
@@ -146,6 +162,11 @@ elements.practiceNav.addEventListener("click", openPracticeFromLink);
 elements.startRoundNav.addEventListener("click", () => openPracticeView());
 elements.wordbookNav.addEventListener("click", openWordbookView);
 elements.wordbookBack.addEventListener("click", openPracticeView);
+elements.vocabularyManagerNav.addEventListener("click", openVocabularyManagerView);
+elements.vocabularyManagerBack.addEventListener("click", openPracticeView);
+elements.addCategoryForm.addEventListener("submit", handleAddCategory);
+elements.categoryManagerList.addEventListener("click", handleCategoryManagerClick);
+elements.categoryManagerList.addEventListener("keydown", handleCategoryManagerKeydown);
 elements.wordbookSearch.addEventListener("input", handleWordbookSearch);
 elements.clearWordbookSearch.addEventListener("click", clearWordbookSearch);
 elements.wordbookFilters.addEventListener("click", handleWordbookFilter);
@@ -756,6 +777,7 @@ function renderRoundControls() {
   elements.siteHeader.toggleAttribute("inert", isModalOpen);
   elements.practiceMain.toggleAttribute("inert", isModalOpen);
   elements.wordbookMain.toggleAttribute("inert", isModalOpen);
+  elements.vocabularyManagerMain.toggleAttribute("inert", isModalOpen);
   if (isModalOpen) {
     elements.siteHeader.setAttribute("aria-hidden", "true");
     elements.practiceMain.setAttribute("aria-hidden", "true");
@@ -879,9 +901,14 @@ function openPracticeView(updateRoute = true) {
   isWordbookOpen = false;
   elements.practiceMain.hidden = false;
   elements.wordbookMain.hidden = true;
+  elements.vocabularyManagerMain.hidden = true;
   elements.practiceNav.classList.add("nav-link-current");
   elements.wordbookNav.classList.remove("nav-link-current");
-  if (updateRoute && window.location.hash === "#wordbook") {
+  elements.vocabularyManagerNav.classList.remove("nav-link-current");
+  if (
+    updateRoute &&
+    ["#wordbook", "#vocabulary-manager"].includes(window.location.hash)
+  ) {
     updateViewRoute("#practice-card");
   }
 }
@@ -890,17 +917,35 @@ function openWordbookView(updateRoute = true) {
   isWordbookOpen = true;
   elements.practiceMain.hidden = true;
   elements.wordbookMain.hidden = false;
+  elements.vocabularyManagerMain.hidden = true;
   elements.practiceNav.classList.remove("nav-link-current");
   elements.wordbookNav.classList.add("nav-link-current");
+  elements.vocabularyManagerNav.classList.remove("nav-link-current");
   if (updateRoute && window.location.hash !== "#wordbook") {
     updateViewRoute("#wordbook");
   }
   renderWordbook();
 }
 
+function openVocabularyManagerView(updateRoute = true) {
+  isWordbookOpen = false;
+  elements.practiceMain.hidden = true;
+  elements.wordbookMain.hidden = true;
+  elements.vocabularyManagerMain.hidden = false;
+  elements.practiceNav.classList.remove("nav-link-current");
+  elements.wordbookNav.classList.remove("nav-link-current");
+  elements.vocabularyManagerNav.classList.add("nav-link-current");
+  if (updateRoute && window.location.hash !== "#vocabulary-manager") {
+    updateViewRoute("#vocabulary-manager");
+  }
+  renderCategoryManager();
+}
+
 function renderViewFromLocation() {
   if (window.location.hash === "#wordbook") {
     openWordbookView(false);
+  } else if (window.location.hash === "#vocabulary-manager") {
+    openVocabularyManagerView(false);
   } else {
     openPracticeView(false);
   }
@@ -912,6 +957,175 @@ function updateViewRoute(hash) {
     "",
     `${window.location.pathname}${window.location.search}${hash}`
   );
+}
+
+function handleAddCategory(event) {
+  event.preventDefault();
+  try {
+    const result = addCategory(currentVocabulary, elements.newCategoryName.value);
+    if (!saveVocabularyCandidate(result.vocabulary)) {
+      renderCategoryManager();
+      return;
+    }
+    elements.newCategoryName.value = "";
+    editingCategoryGroupId = null;
+    setCategoryManagerNotice(`已创建分类“${result.group.category}”。`, "success");
+  } catch (error) {
+    setCategoryManagerNotice(error.message, "error");
+  }
+  renderCategoryManager();
+}
+
+function handleCategoryManagerClick(event) {
+  const button = event.target.closest("[data-category-action]");
+  if (!button || !elements.categoryManagerList.contains(button)) {
+    return;
+  }
+
+  const groupId = Number(button.dataset.groupId);
+  if (button.dataset.categoryAction === "edit") {
+    editingCategoryGroupId = groupId;
+    setCategoryManagerNotice("", "success");
+    renderCategoryManager();
+    elements.categoryManagerList
+      .querySelector(`[data-edit-category-id="${groupId}"]`)
+      ?.focus();
+    return;
+  }
+  if (button.dataset.categoryAction === "cancel") {
+    editingCategoryGroupId = null;
+    setCategoryManagerNotice("", "success");
+    renderCategoryManager();
+    return;
+  }
+  if (button.dataset.categoryAction === "save") {
+    submitCategoryRename(groupId);
+  }
+}
+
+function handleCategoryManagerKeydown(event) {
+  if (!event.target.matches("[data-edit-category-id]")) {
+    return;
+  }
+  if (event.key === "Enter") {
+    event.preventDefault();
+    submitCategoryRename(Number(event.target.dataset.editCategoryId));
+  } else if (event.key === "Escape") {
+    editingCategoryGroupId = null;
+    setCategoryManagerNotice("", "success");
+    renderCategoryManager();
+  }
+}
+
+function submitCategoryRename(groupId) {
+  const input = elements.categoryManagerList.querySelector(
+    `[data-edit-category-id="${groupId}"]`
+  );
+  if (!input) {
+    return;
+  }
+
+  try {
+    const result = renameCategory(currentVocabulary, groupId, input.value);
+    if (!saveVocabularyCandidate(result.vocabulary)) {
+      renderCategoryManager();
+      return;
+    }
+    editingCategoryGroupId = null;
+    setCategoryManagerNotice(`分类名称已更新为“${result.group.category}”。`, "success");
+  } catch (error) {
+    setCategoryManagerNotice(error.message, "error");
+  }
+  renderCategoryManager();
+}
+
+function saveVocabularyCandidate(candidate) {
+  const validation = validateVocabularyData(candidate);
+  if (!validation.isValid) {
+    setCategoryManagerNotice(
+      validation.errors[0]?.message ?? "词库校验失败，未保存修改。",
+      "error"
+    );
+    return false;
+  }
+
+  try {
+    vocabularyRepository.save(candidate);
+    currentVocabulary = vocabularyRepository.getCurrentVocabulary();
+    report = validateVocabularyData(currentVocabulary);
+  } catch {
+    setCategoryManagerNotice("词库保存失败，请检查浏览器存储权限。", "error");
+    return false;
+  }
+
+  renderActiveQuestion();
+  return true;
+}
+
+function setCategoryManagerNotice(message, tone) {
+  categoryManagerNotice = message;
+  categoryManagerNoticeTone = tone;
+}
+
+function renderCategoryManager() {
+  const categories = createCategoryList(currentVocabulary);
+  const fragment = document.createDocumentFragment();
+
+  for (const item of categories) {
+    const row = document.createElement("article");
+    row.className = "category-manager-row";
+    row.dataset.groupId = String(item.groupId);
+
+    if (item.groupId === editingCategoryGroupId) {
+      row.classList.add("editing");
+      const input = document.createElement("input");
+      input.className = "category-edit-input";
+      input.value = item.category;
+      input.dataset.editCategoryId = String(item.groupId);
+      input.setAttribute("aria-label", `编辑分类名称：${item.category}`);
+      row.append(input, createCategoryActions(item.groupId, true));
+    } else {
+      const information = document.createElement("div");
+      const name = document.createElement("strong");
+      const count = document.createElement("span");
+      information.className = "category-manager-info";
+      name.textContent = item.category;
+      count.textContent = `${item.wordCount} 个词`;
+      information.append(name, count);
+      row.append(information, createCategoryActions(item.groupId, false));
+    }
+    fragment.append(row);
+  }
+
+  elements.categoryManagerList.replaceChildren(fragment);
+  elements.categoryManagerCount.textContent = `${categories.length} 个分类`;
+  elements.categoryManagerNotice.textContent = categoryManagerNotice;
+  elements.categoryManagerNotice.dataset.tone = categoryManagerNoticeTone;
+}
+
+function createCategoryActions(groupId, isEditing) {
+  const actions = document.createElement("div");
+  actions.className = "category-manager-actions";
+
+  if (!isEditing) {
+    actions.append(createCategoryActionButton("编辑", "edit", groupId, "button-quiet"));
+    return actions;
+  }
+  actions.append(
+    createCategoryActionButton("保存", "save", groupId, "button-primary"),
+    createCategoryActionButton("取消", "cancel", groupId, "button-quiet")
+  );
+  return actions;
+}
+
+function createCategoryActionButton(label, action, groupId, styleClass) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `button button-compact ${styleClass}`;
+  button.textContent = label;
+  button.dataset.categoryAction = action;
+  button.dataset.groupId = String(groupId);
+  return button;
 }
 
 function handleWordbookSearch(event) {

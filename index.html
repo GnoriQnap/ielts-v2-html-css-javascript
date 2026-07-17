@@ -19,7 +19,7 @@
           <a id="practice-nav" class="nav-link nav-link-current" href="#practice-card">当前学习</a>
           <a class="nav-link nav-start-round" href="#round-panel">开始新一轮</a>
           <button id="wordbook-nav" class="nav-link" type="button">单词本</button>
-          <button class="nav-link" type="button" disabled title="阶段 7 开放">词库管理</button>
+          <button id="vocabulary-manager-nav" class="nav-link" type="button">词库管理</button>
         </nav>
 
         <div class="mode-switch" role="group" aria-label="练习模式">
@@ -165,6 +165,33 @@
       </section>
     </main>
 
+    <main id="vocabulary-manager-main" class="wordbook-shell vocabulary-manager-shell" hidden>
+      <section class="wordbook-panel" aria-labelledby="vocabulary-manager-title">
+        <header class="wordbook-header vocabulary-manager-header">
+          <div>
+            <span class="section-kicker">词库设置</span>
+            <h1 id="vocabulary-manager-title">词库管理</h1>
+            <p>管理语义分类名称，词条内容将在后续阶段开放。</p>
+          </div>
+          <button id="vocabulary-manager-back" class="button button-quiet button-compact" type="button">返回学习</button>
+        </header>
+
+        <form id="add-category-form" class="category-create-form" novalidate>
+          <label for="new-category-name">新增分类</label>
+          <div class="category-create-controls">
+            <input id="new-category-name" type="text" autocomplete="off" placeholder="输入分类名称">
+            <button class="button button-primary button-compact" type="submit">创建分类</button>
+          </div>
+        </form>
+
+        <div class="category-manager-heading">
+          <strong id="category-manager-count">0 个分类</strong>
+          <p id="category-manager-notice" role="status" aria-live="polite"></p>
+        </div>
+        <div id="category-manager-list" class="category-manager-list"></div>
+      </section>
+    </main>
+
     <div
       id="completion-modal"
       class="completion-modal"
@@ -219,6 +246,6 @@
       </section>
     </div>
 
-    <script type="module" src="./js/app.js?v=6.1"></script>
+    <script type="module" src="./js/app.js?v=7.2a"></script>
   </body>
 </html>

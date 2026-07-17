@@ -547,6 +547,65 @@ h1, h2, p { margin-top: 0; }
 .wordbook-current-note { display: block; margin-top: 4px; color: #a56600; font-size: 11px; }
 .wordbook-empty { padding: 52px 24px; color: var(--muted); text-align: center; }
 
+.category-create-form {
+  display: grid;
+  padding: 20px 28px;
+  gap: 8px;
+  border-bottom: 1px solid #e7ebef;
+  background: #fafbfc;
+}
+.category-create-form label { color: #526175; font-size: 13px; font-weight: 800; }
+.category-create-controls { display: flex; align-items: center; gap: 10px; }
+.category-create-controls input,
+.category-edit-input {
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  outline: none;
+}
+.category-create-controls input { width: min(100%, 520px); }
+.category-create-controls input:focus,
+.category-edit-input:focus {
+  border-color: #73c49a;
+  box-shadow: 0 0 0 3px rgb(31 169 97 / 12%);
+}
+.category-manager-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 9px 28px;
+  gap: 16px;
+  border-bottom: 1px solid #e7ebef;
+  color: #526175;
+  font-size: 13px;
+}
+.category-manager-heading p { margin: 0; color: var(--green-dark); font-weight: 700; }
+.category-manager-heading p[data-tone="error"] { color: var(--red-dark); }
+.category-manager-list { content-visibility: auto; }
+.category-manager-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 64px;
+  padding: 10px 28px;
+  gap: 18px;
+  border-bottom: 1px solid #edf0f3;
+  background: #fff;
+}
+.category-manager-row:last-child { border-bottom: 0; }
+.category-manager-row:hover { background: #fbfdfc; }
+.category-manager-row.editing { background: #f8fcfa; }
+.category-manager-info { display: flex; align-items: baseline; min-width: 0; gap: 14px; }
+.category-manager-info strong { min-width: 0; overflow-wrap: anywhere; font-size: 16px; }
+.category-manager-info span { flex: 0 0 auto; color: var(--muted); font-size: 13px; }
+.category-edit-input { width: min(100%, 560px); }
+.category-manager-actions { display: flex; justify-content: flex-end; gap: 7px; }
+
 .word-detail-card { position: relative; width: min(100%, 560px); text-align: left; }
 .word-detail-card h2 { margin-right: 36px; overflow-wrap: anywhere; }
 .word-detail-close {
@@ -746,5 +805,13 @@ h1, h2, p { margin-top: 0; }
   .wordbook-categories { gap: 5px; }
   .wordbook-category { font-size: 12px; }
   .wordbook-status-cell { justify-content: flex-start; }
+  .category-create-form { padding: 14px 16px; }
+  .category-create-controls { align-items: stretch; flex-direction: column; }
+  .category-create-controls input, .category-create-controls .button { width: 100%; }
+  .category-manager-heading { align-items: flex-start; padding: 9px 16px; flex-direction: column; gap: 3px; }
+  .category-manager-row { min-height: 58px; padding: 9px 16px; gap: 10px; }
+  .category-manager-info { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .category-manager-info strong { font-size: 15px; }
+  .category-manager-actions .button { min-width: 0; padding-inline: 10px; }
   .word-detail-card { width: min(100%, 358px); }
 }
