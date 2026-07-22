@@ -12,9 +12,23 @@ import {
   removeLearningRecord,
   recordAnswer
 } from "./core/learning-service.js?v=7.2c3b";
-import { loadAppState, saveAppState, STORAGE_KEY } from "./core/storage.js?v=7.2b2";
+import {
+  createDefaultAppState,
+  loadAppState,
+  normalizeAppState,
+  saveAppState,
+  STORAGE_KEY
+} from "./core/storage.js?v=7.3b";
 import { createVocabularyRepository } from "./core/vocabulary-repository.js?v=7.1";
 import { downloadVocabularyExport } from "./core/vocabulary-export-service.js?v=7.3a";
+import {
+  assertVocabularyImportAllowed,
+  commitVocabularyImport,
+  createVocabularyImportSummary,
+  prepareVocabularyImportFile,
+  resetVocabularyImportInput,
+  VOCABULARY_IMPORT_ERROR_CODES
+} from "./core/vocabulary-import-service.js?v=7.3b";
 import {
   addCategory,
   createCategoryList,
@@ -135,6 +149,8 @@ const elements = {
   closeWordDetail: document.querySelector("#close-word-detail"),
   vocabularyManagerBack: document.querySelector("#vocabulary-manager-back"),
   toggleAddCategory: document.querySelector("#toggle-add-category"),
+  importVocabulary: document.querySelector("#import-vocabulary"),
+  vocabularyImportInput: document.querySelector("#vocabulary-import-input"),
   exportVocabulary: document.querySelector("#export-vocabulary"),
   addCategoryForm: document.querySelector("#add-category-form"),
   newCategoryName: document.querySelector("#new-category-name"),
@@ -152,7 +168,14 @@ const elements = {
   vocabularyDeleteTitle: document.querySelector("#vocabulary-delete-title"),
   vocabularyDeleteMessage: document.querySelector("#vocabulary-delete-message"),
   cancelVocabularyDelete: document.querySelector("#cancel-vocabulary-delete"),
-  confirmVocabularyDelete: document.querySelector("#confirm-vocabulary-delete")
+  confirmVocabularyDelete: document.querySelector("#confirm-vocabulary-delete"),
+  vocabularyImportModal: document.querySelector("#vocabulary-import-modal"),
+  currentVocabularyCategoryCount: document.querySelector("#current-vocabulary-category-count"),
+  currentVocabularyWordCount: document.querySelector("#current-vocabulary-word-count"),
+  importVocabularyCategoryCount: document.querySelector("#import-vocabulary-category-count"),
+  importVocabularyWordCount: document.querySelector("#import-vocabulary-word-count"),
+  cancelVocabularyImport: document.querySelector("#cancel-vocabulary-import"),
+  confirmVocabularyImport: document.querySelector("#confirm-vocabulary-import")
 };
 
 let appState = null;
@@ -174,6 +197,7 @@ let newCategoryWordRowCount = 1;
 let editingCategoryWordKey = null;
 let addingWordGroupId = null;
 let pendingVocabularyDeleteAction = null;
+let pendingVocabularyImport = null;
 const expandedManagerGroupIds = new Set();
 let editingWordKey = null;
 
@@ -205,6 +229,8 @@ elements.wordbookBack.addEventListener("click", openPracticeView);
 elements.vocabularyManagerNav.addEventListener("click", openVocabularyManagerView);
 elements.vocabularyManagerBack.addEventListener("click", openPracticeView);
 elements.toggleAddCategory.addEventListener("click", openCategoryCreateFormB3);
+elements.importVocabulary.addEventListener("click", () => elements.vocabularyImportInput.click());
+elements.vocabularyImportInput.addEventListener("change", handleVocabularyImportSelection);
 elements.exportVocabulary.addEventListener("click", exportCurrentVocabulary);
 elements.addCategoryForm.addEventListener("submit", handleAddCategoryB3);
 elements.addCategoryWordRow.addEventListener("click", addCategoryCreateWordRowB3);
@@ -217,6 +243,8 @@ elements.categoryManagerList.addEventListener("submit", handleCategoryManagerSub
 elements.categoryManagerList.addEventListener("keydown", handleCategoryManagerKeydownB3);
 elements.cancelVocabularyDelete.addEventListener("click", closeVocabularyDeleteConfirmationB3);
 elements.confirmVocabularyDelete.addEventListener("click", confirmVocabularyDeleteB3);
+elements.cancelVocabularyImport.addEventListener("click", closeVocabularyImportConfirmation);
+elements.confirmVocabularyImport.addEventListener("click", confirmVocabularyImport);
 elements.wordbookSearch.addEventListener("input", handleWordbookSearch);
 elements.clearWordbookSearch.addEventListener("click", clearWordbookSearch);
 elements.wordbookFilters.addEventListener("click", handleWordbookFilter);
@@ -261,6 +289,103 @@ function exportCurrentVocabulary() {
     setCategoryManagerNotice("词库导出失败，请重试", "error");
   }
   renderCategoryTreeManagerB3();
+}
+
+async function handleVocabularyImportSelection(event) {
+  const file = event.target.files?.[0] ?? null;
+  if (!file) {
+    return;
+  }
+
+  try {
+    const preparedImport = await prepareVocabularyImportFile(file);
+    assertVocabularyImportAllowed(preparedImport, {
+      activeQuestion: appState.practice.activeQuestion,
+      activeRound: appState.rounds.current
+    });
+    openVocabularyImportConfirmation(preparedImport);
+  } catch (error) {
+    setCategoryManagerNotice(getVocabularyImportErrorMessage(error), "error");
+    renderCategoryTreeManagerB3();
+  } finally {
+    resetVocabularyImportInput(elements.vocabularyImportInput);
+  }
+}
+
+function openVocabularyImportConfirmation(preparedImport) {
+  const currentSummary = createVocabularyImportSummary(
+    vocabularyRepository.getCurrentVocabulary(),
+    report
+  );
+  pendingVocabularyImport = preparedImport;
+  elements.currentVocabularyCategoryCount.textContent = String(currentSummary.categoryCount);
+  elements.currentVocabularyWordCount.textContent = String(currentSummary.uniqueWordCount);
+  elements.importVocabularyCategoryCount.textContent = String(preparedImport.summary.categoryCount);
+  elements.importVocabularyWordCount.textContent = String(preparedImport.summary.uniqueWordCount);
+  elements.vocabularyImportModal.hidden = false;
+  document.body.classList.add("modal-open");
+  elements.cancelVocabularyImport.focus();
+}
+
+function closeVocabularyImportConfirmation() {
+  pendingVocabularyImport = null;
+  elements.vocabularyImportModal.hidden = true;
+  document.body.classList.remove("modal-open");
+}
+
+function confirmVocabularyImport() {
+  if (!pendingVocabularyImport) {
+    return;
+  }
+
+  const preparedImport = pendingVocabularyImport;
+  const nextState = normalizeAppState(appState, {
+    defaultState: createDefaultAppState(),
+    validWordKeys: new Set(preparedImport.validation.index.allWordKeys),
+    validGroupIds: new Set(preparedImport.validation.index.groupById.keys()),
+    correctGroupIdsByWordKey: preparedImport.validation.index.groupIdsByWordKey
+  });
+
+  try {
+    const result = commitVocabularyImport(vocabularyRepository, preparedImport, {
+      activeQuestion: appState.practice.activeQuestion,
+      activeRound: appState.rounds.current,
+      relatedState: nextState,
+      saveRelatedState: saveAppState
+    });
+    currentVocabulary = result.vocabulary;
+    report = result.validation;
+    appState = result.relatedState;
+    persistenceError = "";
+    pendingVocabularyImport = null;
+    elements.vocabularyImportModal.hidden = true;
+    document.body.classList.remove("modal-open");
+    editingCategoryGroupId = null;
+    editingCategoryWordKey = null;
+    addingWordGroupId = null;
+    expandedManagerGroupIds.clear();
+    setCategoryManagerNotice(
+      `词库导入成功\n${result.summary.categoryCount} 个分类\n${result.summary.uniqueWordCount} 个唯一词条`,
+      "success"
+    );
+    renderActiveQuestion();
+    renderVocabularyManager();
+  } catch (error) {
+    setCategoryManagerNotice(getVocabularyImportErrorMessage(error), "error");
+    closeVocabularyImportConfirmation();
+    renderCategoryTreeManagerB3();
+  }
+}
+
+function getVocabularyImportErrorMessage(error) {
+  return {
+    [VOCABULARY_IMPORT_ERROR_CODES.READ_ERROR]: "无法读取文件",
+    [VOCABULARY_IMPORT_ERROR_CODES.JSON_ERROR]: "JSON 格式错误",
+    [VOCABULARY_IMPORT_ERROR_CODES.INVALID_DATA]: "词库数据不合法",
+    [VOCABULARY_IMPORT_ERROR_CODES.FILE_TOO_LARGE]: "文件过大，无法导入",
+    [VOCABULARY_IMPORT_ERROR_CODES.ACTIVE_STATE]: "当前题或活动轮次正在使用旧词库，请先完成或结束本轮学习后再导入",
+    [VOCABULARY_IMPORT_ERROR_CODES.SAVE_ERROR]: "保存失败"
+  }[error?.code] ?? "词库数据不合法";
 }
 
 function replaceActiveQuestion() {

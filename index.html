@@ -180,6 +180,8 @@
           <div class="category-create-launcher">
             <strong>新增分类</strong>
             <div class="category-create-launcher-actions">
+              <button id="import-vocabulary" class="button button-quiet button-compact" type="button">导入词库</button>
+              <input id="vocabulary-import-input" type="file" accept=".json,application/json" hidden>
               <button id="export-vocabulary" class="button button-quiet button-compact" type="button">导出词库</button>
               <button id="toggle-add-category" class="button button-primary button-compact" type="button">新增分类</button>
             </div>
@@ -293,6 +295,36 @@
       </section>
     </div>
 
-    <script type="module" src="./js/app.js?v=7.3a"></script>
+    <div
+      id="vocabulary-import-modal"
+      class="completion-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="vocabulary-import-title"
+      hidden
+    >
+      <section class="completion-card vocabulary-import-card">
+        <span class="section-kicker">完整覆盖导入</span>
+        <h2 id="vocabulary-import-title">导入后将覆盖当前词库。</h2>
+        <div class="vocabulary-import-summary">
+          <p>
+            当前词库：
+            <strong id="current-vocabulary-category-count">0</strong> 个分类，
+            <strong id="current-vocabulary-word-count">0</strong> 个词条
+          </p>
+          <p>
+            导入词库：
+            <strong id="import-vocabulary-category-count">0</strong> 个分类，
+            <strong id="import-vocabulary-word-count">0</strong> 个词条
+          </p>
+        </div>
+        <div class="completion-actions">
+          <button id="cancel-vocabulary-import" class="button button-quiet" type="button">取消</button>
+          <button id="confirm-vocabulary-import" class="button button-primary" type="button">确认导入</button>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="./js/app.js?v=7.3b"></script>
   </body>
 </html>

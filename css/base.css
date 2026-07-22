@@ -849,6 +849,19 @@ h1, h2, p { margin-top: 0; }
 }
 .vocabulary-delete-card { width: min(100%, 460px); }
 .vocabulary-delete-card .completion-message { max-width: 380px; }
+.vocabulary-import-card { width: min(100%, 520px); }
+.vocabulary-import-summary {
+  display: grid;
+  margin: 20px 0 24px;
+  overflow: hidden;
+  border: 1px solid #dcebe3;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 72%);
+  text-align: left;
+}
+.vocabulary-import-summary p { margin: 0; padding: 13px 16px; color: var(--muted); }
+.vocabulary-import-summary p + p { border-top: 1px solid #e6eee9; }
+.vocabulary-import-summary strong { color: var(--green-dark); }
 
 .word-detail-card { position: relative; width: min(100%, 560px); text-align: left; }
 .word-detail-card h2 { margin-right: 36px; overflow-wrap: anywhere; }
