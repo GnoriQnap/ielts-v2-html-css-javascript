@@ -266,16 +266,13 @@
 
     <div
       id="word-detail-modal"
-      class="completion-modal"
+      class="vocabulary-card-overlay"
       role="dialog"
       aria-modal="true"
       aria-label="词条详情"
       hidden
     >
-      <section class="completion-card word-detail-card">
-        <button id="close-word-detail" class="word-detail-close" type="button" aria-label="关闭单词详情">×</button>
-        <div id="word-detail-content" class="word-detail-content"></div>
-      </section>
+      <div id="word-detail-content" class="vocabulary-card-host"></div>
     </div>
 
     <div
@@ -326,6 +323,6 @@
       </section>
     </div>
 
-    <script type="module" src="./js/app.js?v=8.2"></script>
+    <script type="module" src="./js/app.js?v=8.3"></script>
   </body>
 </html>

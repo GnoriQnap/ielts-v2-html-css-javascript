@@ -71,7 +71,7 @@ import {
   filterWordbookEntries,
   WORDBOOK_FILTERS
 } from "./core/wordbook-service.js?v=8.2";
-import { createVocabularyDetailsView } from "./ui/vocabulary-details-view.js?v=8.2";
+import { createVocabularyCard } from "./ui/vocabulary-card.js?v=8.3";
 
 const vocabularyRepository = createVocabularyRepository({
   fallbackVocabulary: vocabularyData,
@@ -146,7 +146,6 @@ const elements = {
   wordbookEmpty: document.querySelector("#wordbook-empty"),
   wordDetailModal: document.querySelector("#word-detail-modal"),
   wordDetailContent: document.querySelector("#word-detail-content"),
-  closeWordDetail: document.querySelector("#close-word-detail"),
   vocabularyManagerBack: document.querySelector("#vocabulary-manager-back"),
   toggleAddCategory: document.querySelector("#toggle-add-category"),
   importVocabulary: document.querySelector("#import-vocabulary"),
@@ -198,6 +197,7 @@ let editingCategoryWordKey = null;
 let addingWordGroupId = null;
 let pendingVocabularyDeleteAction = null;
 let pendingVocabularyImport = null;
+let vocabularyCardReturnFocusElement = null;
 const expandedManagerGroupIds = new Set();
 let editingWordKey = null;
 
@@ -250,7 +250,6 @@ elements.wordbookSearch.addEventListener("input", handleWordbookSearch);
 elements.clearWordbookSearch.addEventListener("click", clearWordbookSearch);
 elements.wordbookFilters.addEventListener("click", handleWordbookFilter);
 elements.wordbookList.addEventListener("click", handleWordbookListClick);
-elements.closeWordDetail.addEventListener("click", closeWordDetail);
 window.addEventListener("popstate", renderViewFromLocation);
 window.addEventListener("hashchange", renderViewFromLocation);
 
@@ -2465,9 +2464,11 @@ function openVocabularyDetails(wordKey) {
   if (!displayText) {
     return;
   }
-  elements.wordDetailContent.replaceChildren(createVocabularyDetailsView({
+  vocabularyCardReturnFocusElement = document.activeElement;
+  elements.wordDetailContent.replaceChildren(createVocabularyCard({
     displayText,
-    details: vocabularyRepository.getWordDetails(wordKey)
+    details: vocabularyRepository.getWordDetails(wordKey),
+    onClose: closeWordDetail
   }));
   elements.wordDetailModal.hidden = false;
   elements.siteHeader.setAttribute("inert", "");
@@ -2475,7 +2476,7 @@ function openVocabularyDetails(wordKey) {
   elements.wordbookMain.setAttribute("inert", "");
   elements.vocabularyManagerMain.setAttribute("inert", "");
   document.body.classList.add("modal-open");
-  elements.closeWordDetail.focus();
+  elements.wordDetailContent.querySelector("[data-vocabulary-card-close]")?.focus();
 }
 
 function closeWordDetail() {
@@ -2486,6 +2487,10 @@ function closeWordDetail() {
   elements.vocabularyManagerMain.removeAttribute("inert");
   document.body.classList.remove("modal-open");
   renderRoundControls();
+  if (vocabularyCardReturnFocusElement?.isConnected) {
+    vocabularyCardReturnFocusElement.focus();
+  }
+  vocabularyCardReturnFocusElement = null;
 }
 
 function persistState() {
