@@ -24,6 +24,20 @@ export function getLearningRecord(learning, wordKey) {
   };
 }
 
+export function removeLearningRecord(learning, wordKey) {
+  const records = learning?.byWordKey;
+  if (!records || typeof records !== "object" || !(wordKey in records)) {
+    return learning;
+  }
+
+  const nextRecords = { ...records };
+  delete nextRecords[wordKey];
+  return {
+    ...learning,
+    byWordKey: nextRecords
+  };
+}
+
 export function setLearningStatus({
   learning,
   wordKey,

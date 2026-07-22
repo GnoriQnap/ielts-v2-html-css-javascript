@@ -168,6 +168,64 @@ export function removeVocabularyWordRelation(
   };
 }
 
+export function deleteCustomVocabularyWord(
+  vocabulary,
+  wordKeyValue,
+  {
+    systemWordKeys = new Set(),
+    activeQuestionWordKey = null,
+    activeRoundWordKeys = []
+  } = {}
+) {
+  const vocabularyList = getVocabularyList(vocabulary);
+  const wordKey = normalizeWordKey(wordKeyValue);
+  const relations = vocabularyList.filter((group) => (
+    Array.isArray(group?.words) &&
+    group.words.some((word) => normalizeWordKey(word) === wordKey)
+  ));
+  if (!wordKey || relations.length === 0) {
+    throw new RangeError("要删除的词条不存在。");
+  }
+
+  if (normalizeWordKeySet(systemWordKeys).has(wordKey)) {
+    throw new RangeError("系统词库词条不能删除。");
+  }
+  if (normalizeWordKey(activeQuestionWordKey) === wordKey) {
+    throw new RangeError("当前题正在使用该词条，暂时无法删除。");
+  }
+  if (normalizeWordKeySet(activeRoundWordKeys).has(wordKey)) {
+    throw new RangeError("该词条正在当前轮次中使用，暂时无法删除。");
+  }
+
+  const displayText = relations
+    .flatMap((group) => group.words)
+    .find((word) => normalizeWordKey(word) === wordKey);
+  const nextVocabulary = {
+    ...vocabulary,
+    vocabulary_list: vocabularyList.map((group) => ({
+      ...group,
+      words: (Array.isArray(group?.words) ? group.words : [])
+        .filter((word) => normalizeWordKey(word) !== wordKey)
+    }))
+  };
+  if (vocabulary.word_details && typeof vocabulary.word_details === "object") {
+    nextVocabulary.word_details = Object.fromEntries(
+      Object.entries(vocabulary.word_details)
+        .filter(([detailWordKey]) => normalizeWordKey(detailWordKey) !== wordKey)
+    );
+  }
+
+  return {
+    vocabulary: clonePlain(nextVocabulary),
+    word: {
+      wordKey,
+      displayText,
+      removedGroupIds: relations.map((group) => group.group_id),
+      removedRelationCount: relations.length
+    }
+  };
+}
+
 export function createWordManagementEntries(index, learning) {
   if (!index?.allWordKeys || !index?.displayByWordKey || !index?.groupIdsByWordKey || !index?.groupById) {
     throw new TypeError("必须提供有效的 vocabulary index。");
@@ -204,6 +262,13 @@ function hasWordKey(vocabularyList, wordKey) {
   return vocabularyList.some((group) => (
     Array.isArray(group?.words) && group.words.some((word) => normalizeWordKey(word) === wordKey)
   ));
+}
+
+function normalizeWordKeySet(values) {
+  const candidates = values instanceof Set
+    ? [...values]
+    : Array.isArray(values) ? values : [];
+  return new Set(candidates.map(normalizeWordKey).filter(Boolean));
 }
 
 function validateSelectedGroupIds(vocabularyList, groupIds) {

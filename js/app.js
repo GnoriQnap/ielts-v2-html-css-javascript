@@ -9,8 +9,9 @@ import {
   applyMasteryDecision,
   getLearningRecord,
   LEARNING_STATUSES,
+  removeLearningRecord,
   recordAnswer
-} from "./core/learning-service.js";
+} from "./core/learning-service.js?v=7.2c3b";
 import { loadAppState, saveAppState, STORAGE_KEY } from "./core/storage.js?v=7.2b2";
 import { createVocabularyRepository } from "./core/vocabulary-repository.js?v=7.1";
 import {
@@ -22,10 +23,11 @@ import {
 import {
   addVocabularyWord,
   createWordManagementEntries,
+  deleteCustomVocabularyWord,
   detectWordIdentityChange,
   editVocabularyWord,
   removeVocabularyWordRelation
-} from "./core/vocabulary-word-service.js?v=7.2c3a";
+} from "./core/vocabulary-word-service.js?v=7.2c3b";
 import { normalizeWordKey } from "./core/normalization.js";
 import {
   PRACTICE_MODES,
@@ -60,6 +62,12 @@ const vocabularyRepository = createVocabularyRepository({
   fallbackVocabulary: vocabularyData,
   legacyStateKey: STORAGE_KEY
 });
+const systemWordKeys = new Set(
+  vocabularyData.vocabulary_list
+    .flatMap((group) => Array.isArray(group?.words) ? group.words : [])
+    .map(normalizeWordKey)
+    .filter(Boolean)
+);
 vocabularyRepository.load();
 let currentVocabulary = vocabularyRepository.getCurrentVocabulary();
 let report = validateVocabularyData(currentVocabulary);
@@ -1179,7 +1187,11 @@ function handleCategoryManagerClickB3(event) {
   } else if (action === "cancel-word") {
     editingCategoryWordKey = null;
   } else if (action === "delete-word-relation") {
-    deleteWordRelationB3(groupId, wordKey);
+    if (systemWordKeys.has(wordKey)) {
+      deleteWordRelationB3(groupId, wordKey);
+    } else {
+      deleteCustomWordB3(wordKey);
+    }
     return;
   } else if (action === "add-word") {
     addingWordGroupId = groupId;
@@ -1324,6 +1336,53 @@ function deleteWordRelationB3(groupId, wordKey) {
     setCategoryManagerNotice(error.message, "error");
     renderCategoryTreeManagerB3();
   }
+}
+
+function deleteCustomWordB3(wordKey) {
+  try {
+    const deletion = createCustomWordDeletionB3(wordKey);
+    openVocabularyDeleteConfirmationB3({
+      title: `删除自定义词条「${deletion.word.displayText}」`,
+      message: `将解除 ${deletion.word.removedRelationCount} 个分类关系，并清理该词条的学习记录和待强化队列。确认删除？`,
+      confirmLabel: "确认删除",
+      action: () => performDeleteCustomWordB3(wordKey)
+    });
+  } catch (error) {
+    setCategoryManagerNotice(error.message, "error");
+    renderCategoryTreeManagerB3();
+  }
+}
+
+function createCustomWordDeletionB3(wordKey) {
+  return deleteCustomVocabularyWord(currentVocabulary, wordKey, {
+    systemWordKeys,
+    activeQuestionWordKey: appState.practice.activeQuestion?.wordKey ?? null,
+    activeRoundWordKeys: appState.rounds.current?.wordKeys ?? []
+  });
+}
+
+function performDeleteCustomWordB3(wordKey) {
+  try {
+    const deletion = createCustomWordDeletionB3(wordKey);
+    if (!saveVocabularyCandidate(deletion.vocabulary)) {
+      renderCategoryTreeManagerB3();
+      return;
+    }
+    appState = {
+      ...appState,
+      learning: removeLearningRecord(appState.learning, wordKey),
+      practice: {
+        ...appState.practice,
+        reviewQueue: removeReviewItem(appState.practice.reviewQueue, wordKey)
+      }
+    };
+    persistState();
+    editingCategoryWordKey = null;
+    setCategoryManagerNotice(`已删除自定义词条“${deletion.word.displayText}”。`, "success");
+  } catch (error) {
+    setCategoryManagerNotice(error.message, "error");
+  }
+  renderCategoryTreeManagerB3();
 }
 
 function createWordRelationRemovalB3(groupId, wordKey) {

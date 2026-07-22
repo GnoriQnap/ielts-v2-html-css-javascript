@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   addVocabularyWord,
   createWordManagementEntries,
+  deleteCustomVocabularyWord,
   detectWordIdentityChange,
   editVocabularyWord,
   filterWordManagementEntries,
@@ -11,6 +12,8 @@ import {
 import { createCategoryList } from "../js/core/vocabulary-category-service.js";
 import { createVocabularyIndex } from "../js/core/vocabulary-index.js";
 import { createQuestion } from "../js/core/question-engine.js";
+import { removeLearningRecord } from "../js/core/learning-service.js";
+import { removeReviewItem } from "../js/core/review-scheduler.js";
 import { createDefaultAppState } from "../js/core/storage.js";
 import { createVocabularyRepository } from "../js/core/vocabulary-repository.js";
 import { createWordbookEntries } from "../js/core/wordbook-service.js";
@@ -336,4 +339,110 @@ test("a blocked identity-changing edit leaves learning state unchanged", () => {
 
   assert.throws(() => editVocabularyWord(source, "idea", "ideal", [1]));
   assert.deepEqual(learning, snapshot);
+});
+
+test("deleting a custom word removes every category relation and its details", () => {
+  const source = {
+    vocabulary_list: [
+      { group_id: 1, category: "保持", words: ["custom-word", "keep"] },
+      { group_id: 2, category: "支持", words: ["custom-word"] }
+    ],
+    word_details: {
+      "custom-word": { definition: "temporary" },
+      keep: { definition: "keep" }
+    }
+  };
+  const result = deleteCustomVocabularyWord(source, "CUSTOM-WORD", {
+    systemWordKeys: new Set(["keep"])
+  });
+  const index = createVocabularyIndex(result.vocabulary.vocabulary_list);
+
+  assert.equal(result.word.removedRelationCount, 2);
+  assert.deepEqual(result.word.removedGroupIds, [1, 2]);
+  assert.equal(index.displayByWordKey.has("custom-word"), false);
+  assert.equal("custom-word" in result.vocabulary.word_details, false);
+  assert.equal("keep" in result.vocabulary.word_details, true);
+  assert.equal(source.vocabulary_list[0].words.includes("custom-word"), true);
+});
+
+test("system vocabulary words cannot be deleted", () => {
+  assert.throws(
+    () => deleteCustomVocabularyWord(vocabulary, "sustain", {
+      systemWordKeys: new Set(["sustain", "support"])
+    }),
+    /系统词库词条不能删除。/
+  );
+});
+
+test("current question and active round references protect a custom word", () => {
+  const source = {
+    vocabulary_list: [
+      { group_id: 1, category: "自定义", words: ["custom-word"] }
+    ]
+  };
+
+  assert.throws(
+    () => deleteCustomVocabularyWord(source, "custom-word", {
+      activeQuestionWordKey: "custom-word"
+    }),
+    /当前题正在使用该词条，暂时无法删除。/
+  );
+  assert.throws(
+    () => deleteCustomVocabularyWord(source, "custom-word", {
+      activeRoundWordKeys: ["custom-word"]
+    }),
+    /该词条正在当前轮次中使用，暂时无法删除。/
+  );
+});
+
+test("custom word deletion cleanup removes learning and review data but preserves history", () => {
+  const source = {
+    vocabulary_list: [
+      { group_id: 1, category: "自定义", words: ["custom-word"] }
+    ]
+  };
+  const state = createDefaultAppState();
+  state.learning.byWordKey["custom-word"] = {
+    status: "review",
+    errorCount: 2,
+    answerCount: 2
+  };
+  state.practice.reviewQueue = [{
+    wordKey: "custom-word",
+    scope: "free",
+    roundId: null,
+    scheduledAtAttempt: 1,
+    dueAfterAttempt: 7,
+    delay: 6
+  }];
+  state.rounds.lastCompletedSummary = { roundId: "history", totalWords: 20 };
+  const historySnapshot = structuredClone(state.rounds.lastCompletedSummary);
+
+  deleteCustomVocabularyWord(source, "custom-word");
+  const learning = removeLearningRecord(state.learning, "custom-word");
+  const reviewQueue = removeReviewItem(state.practice.reviewQueue, "custom-word");
+
+  assert.equal("custom-word" in learning.byWordKey, false);
+  assert.deepEqual(reviewQueue, []);
+  assert.deepEqual(state.rounds.lastCompletedSummary, historySnapshot);
+});
+
+test("a repository-saved custom word deletion survives reload and index rebuild", () => {
+  const storage = new MemoryStorage();
+  const repository = createVocabularyRepository({ storage, fallbackVocabulary: vocabulary });
+  repository.load();
+  const added = addVocabularyWord(repository.getCurrentVocabulary(), "custom-word", [1, 2]);
+  repository.save(added.vocabulary);
+  const deletion = deleteCustomVocabularyWord(
+    repository.getCurrentVocabulary(),
+    "custom-word",
+    { systemWordKeys: new Set(vocabulary.vocabulary_list.flatMap((group) => group.words)) }
+  );
+  repository.save(deletion.vocabulary);
+
+  const reloaded = createVocabularyRepository({ storage, fallbackVocabulary: vocabulary }).load();
+  const index = createVocabularyIndex(reloaded.vocabulary_list);
+
+  assert.equal(index.displayByWordKey.has("custom-word"), false);
+  assert.equal(index.allWordKeys.includes("custom-word"), false);
 });

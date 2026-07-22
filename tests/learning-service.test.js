@@ -5,6 +5,7 @@ import {
   getLearningRecord,
   LEARNING_STATUSES,
   recordAnswer,
+  removeLearningRecord,
   setLearningStatus
 } from "../js/core/learning-service.js";
 
@@ -139,4 +140,24 @@ test("manual status changes preserve statistics and block the active question", 
   assert.equal(blocked.applied, false);
   assert.equal(blocked.reason, "active-question");
   assert.equal(blocked.learning.byWordKey.critical.status, LEARNING_STATUSES.REMEMBERED);
+});
+
+test("removing a learning record preserves all other word records", () => {
+  const learning = {
+    byWordKey: {
+      custom: { status: "review", errorCount: 2 },
+      keep: { status: "remembered", correctCount: 3 }
+    }
+  };
+  const result = removeLearningRecord(learning, "custom");
+
+  assert.equal("custom" in result.byWordKey, false);
+  assert.deepEqual(result.byWordKey.keep, learning.byWordKey.keep);
+  assert.equal("custom" in learning.byWordKey, true);
+});
+
+test("removing a missing learning record is a no-op", () => {
+  const learning = { byWordKey: { keep: { status: "new" } } };
+
+  assert.equal(removeLearningRecord(learning, "missing"), learning);
 });
