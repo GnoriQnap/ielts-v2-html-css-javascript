@@ -749,6 +749,7 @@ h1, h2, p { margin-top: 0; }
   border-bottom: 1px solid #e7ebef;
   background: #fafbfc;
 }
+.category-create-launcher-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .category-create-form-expanded {
   grid-template-columns: minmax(220px, 0.7fr) minmax(360px, 1.5fr);
   padding-block: 18px;
@@ -1082,6 +1083,7 @@ h1, h2, p { margin-top: 0; }
   .word-manager-edit-actions { justify-content: flex-end; }
   .word-manager-edit-actions .button { min-width: 76px; }
   .category-create-launcher { min-height: 56px; padding: 10px 16px; }
+  .category-create-launcher-actions { min-width: 0; flex-wrap: wrap; }
   .category-create-form-expanded { grid-template-columns: 1fr; padding: 14px 16px; gap: 14px; }
   .category-create-actions { grid-column: auto; }
   .category-create-word-row { grid-template-columns: 24px minmax(0, 1fr) auto; gap: 6px; }

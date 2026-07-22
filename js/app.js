@@ -14,6 +14,7 @@ import {
 } from "./core/learning-service.js?v=7.2c3b";
 import { loadAppState, saveAppState, STORAGE_KEY } from "./core/storage.js?v=7.2b2";
 import { createVocabularyRepository } from "./core/vocabulary-repository.js?v=7.1";
+import { downloadVocabularyExport } from "./core/vocabulary-export-service.js?v=7.3a";
 import {
   addCategory,
   createCategoryList,
@@ -134,6 +135,7 @@ const elements = {
   closeWordDetail: document.querySelector("#close-word-detail"),
   vocabularyManagerBack: document.querySelector("#vocabulary-manager-back"),
   toggleAddCategory: document.querySelector("#toggle-add-category"),
+  exportVocabulary: document.querySelector("#export-vocabulary"),
   addCategoryForm: document.querySelector("#add-category-form"),
   newCategoryName: document.querySelector("#new-category-name"),
   newCategoryWords: document.querySelector("#new-category-words"),
@@ -203,6 +205,7 @@ elements.wordbookBack.addEventListener("click", openPracticeView);
 elements.vocabularyManagerNav.addEventListener("click", openVocabularyManagerView);
 elements.vocabularyManagerBack.addEventListener("click", openPracticeView);
 elements.toggleAddCategory.addEventListener("click", openCategoryCreateFormB3);
+elements.exportVocabulary.addEventListener("click", exportCurrentVocabulary);
 elements.addCategoryForm.addEventListener("submit", handleAddCategoryB3);
 elements.addCategoryWordRow.addEventListener("click", addCategoryCreateWordRowB3);
 elements.cancelAddCategory.addEventListener("click", closeCategoryCreateFormB3);
@@ -248,6 +251,16 @@ if (report.isValid) {
 function showNextQuestion() {
   replaceActiveQuestion();
   renderActiveQuestion();
+}
+
+function exportCurrentVocabulary() {
+  try {
+    downloadVocabularyExport(vocabularyRepository);
+    setCategoryManagerNotice("词库已导出", "success");
+  } catch {
+    setCategoryManagerNotice("词库导出失败，请重试", "error");
+  }
+  renderCategoryTreeManagerB3();
 }
 
 function replaceActiveQuestion() {
