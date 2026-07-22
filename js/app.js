@@ -69,9 +69,9 @@ import {
   createWordbookCategoryTree,
   createWordbookEntries,
   filterWordbookEntries,
-  hasWordDetails,
   WORDBOOK_FILTERS
-} from "./core/wordbook-service.js?v=6.0";
+} from "./core/wordbook-service.js?v=8.2";
+import { createVocabularyDetailsView } from "./ui/vocabulary-details-view.js?v=8.2";
 
 const vocabularyRepository = createVocabularyRepository({
   fallbackVocabulary: vocabularyData,
@@ -112,6 +112,7 @@ const elements = {
   markReview: document.querySelector("#mark-review"),
   markRemembered: document.querySelector("#mark-remembered"),
   next: document.querySelector("#next-question"),
+  viewQuestionDetails: document.querySelector("#view-question-details"),
   modeRandom: document.querySelector("#mode-random"),
   modeIntensive: document.querySelector("#mode-intensive"),
   empty: document.querySelector("#empty-state"),
@@ -144,7 +145,6 @@ const elements = {
   wordbookList: document.querySelector("#wordbook-list"),
   wordbookEmpty: document.querySelector("#wordbook-empty"),
   wordDetailModal: document.querySelector("#word-detail-modal"),
-  wordDetailTitle: document.querySelector("#word-detail-title"),
   wordDetailContent: document.querySelector("#word-detail-content"),
   closeWordDetail: document.querySelector("#close-word-detail"),
   vocabularyManagerBack: document.querySelector("#vocabulary-manager-back"),
@@ -205,6 +205,7 @@ elements.submit.addEventListener("click", submitAnswer);
 elements.markReview.addEventListener("click", () => chooseMasteryStatus(LEARNING_STATUSES.REVIEW));
 elements.markRemembered.addEventListener("click", () => chooseMasteryStatus(LEARNING_STATUSES.REMEMBERED));
 elements.next.addEventListener("click", showNextQuestion);
+elements.viewQuestionDetails.addEventListener("click", openActiveQuestionDetails);
 elements.modeRandom.addEventListener("click", () => {
   openPracticeView();
   changeMode(PRACTICE_MODES.RANDOM);
@@ -513,6 +514,10 @@ function renderOptions(activeQuestion, isMultiple) {
 function renderQuestionActions(activeQuestion) {
   elements.feedback.textContent = "";
   elements.feedback.className = "feedback";
+  elements.viewQuestionDetails.hidden = (
+    appState.practice.roundPreparation ||
+    activeQuestion.phase === "answering"
+  );
   if (appState.practice.roundPreparation) {
     elements.submit.hidden = true;
     elements.submit.disabled = true;
@@ -762,6 +767,7 @@ function renderEmptyState() {
   elements.submit.hidden = true;
   elements.decisions.hidden = true;
   elements.next.hidden = true;
+  elements.viewQuestionDetails.hidden = true;
 }
 
 function startNewRound() {
@@ -1304,6 +1310,10 @@ function handleCategoryManagerClickB3(event) {
     )?.requestSubmit();
     return;
   }
+  if (action === "view-details") {
+    openVocabularyDetails(wordKey);
+    return;
+  }
   if (action === "toggle") {
     if (expandedManagerGroupIds.has(groupId)) {
       expandedManagerGroupIds.delete(groupId);
@@ -1758,6 +1768,7 @@ function createTreeWordActionsB3(groupId, wordKey, isEditing) {
     actions.append(save, createTreeActionButtonB3("取消", "cancel-word", groupId, "button-quiet", wordKey));
   } else {
     actions.append(
+      createTreeActionButtonB3("详情", "view-details", groupId, "button-quiet", wordKey),
       createTreeActionButtonB3("编辑", "edit-word", groupId, "button-quiet", wordKey),
       createTreeActionButtonB3("删除", "delete-word-relation", groupId, "button-danger", wordKey)
     );
@@ -2342,7 +2353,7 @@ function createWordbookRow(entry, options = {}) {
   detailButton.type = "button";
   detailButton.className = "word-detail-trigger";
   detailButton.dataset.detailWordKey = entry.wordKey;
-  detailButton.textContent = "查看注释";
+  detailButton.textContent = "查看详情";
   identity.append(word, detailButton);
 
   categories.className = "wordbook-categories";
@@ -2438,84 +2449,42 @@ function handleWordbookListClick(event) {
 
   const detailButton = event.target.closest("[data-detail-word-key]");
   if (detailButton && elements.wordbookList.contains(detailButton)) {
-    openWordDetail(detailButton.dataset.detailWordKey);
+    openVocabularyDetails(detailButton.dataset.detailWordKey);
   }
 }
 
-function openWordDetail(wordKey) {
-  const entry = createWordbookEntries(report.index, appState.learning, vocabularyRepository)
-    .find((item) => item.wordKey === wordKey);
-  if (!entry) {
+function openActiveQuestionDetails() {
+  const wordKey = appState.practice.activeQuestion?.wordKey;
+  if (wordKey && appState.practice.activeQuestion.phase === "graded") {
+    openVocabularyDetails(wordKey);
+  }
+}
+
+function openVocabularyDetails(wordKey) {
+  const displayText = report.index.displayByWordKey.get(wordKey);
+  if (!displayText) {
     return;
   }
-
-  elements.wordDetailTitle.textContent = entry.displayText;
-  elements.wordDetailContent.replaceChildren();
-  if (!hasWordDetails(entry.details)) {
-    const empty = document.createElement("p");
-    empty.className = "word-detail-empty";
-    empty.textContent = "暂未添加单词注释";
-    elements.wordDetailContent.append(empty);
-  } else {
-    appendWordDetail(
-      "音标",
-      [
-        entry.details.phonetics.uk ? `UK ${entry.details.phonetics.uk}` : "",
-        entry.details.phonetics.us ? `US ${entry.details.phonetics.us}` : ""
-      ].filter(Boolean).join(" · ")
-    );
-    appendWordDetailList(
-      "释义",
-      entry.details.meanings.map((meaning) => (
-        [meaning.partOfSpeech, meaning.definitionZh].filter(Boolean).join(" ")
-      )).filter(Boolean)
-    );
-    appendWordDetailList("常用搭配", entry.details.collocations);
-    appendWordDetailList(
-      "例句",
-      entry.details.examples.map((example) => (
-        [example.en, example.zh].filter(Boolean).join(" — ")
-      )).filter(Boolean)
-    );
-    appendWordDetail("备注", entry.details.notes);
-    appendWordDetail("来源", entry.details.source);
-  }
+  elements.wordDetailContent.replaceChildren(createVocabularyDetailsView({
+    displayText,
+    details: vocabularyRepository.getWordDetails(wordKey)
+  }));
   elements.wordDetailModal.hidden = false;
   elements.siteHeader.setAttribute("inert", "");
   elements.practiceMain.setAttribute("inert", "");
   elements.wordbookMain.setAttribute("inert", "");
+  elements.vocabularyManagerMain.setAttribute("inert", "");
   document.body.classList.add("modal-open");
   elements.closeWordDetail.focus();
 }
 
-function appendWordDetail(title, value) {
-  if (!value) {
-    return;
-  }
-  const heading = document.createElement("h3");
-  const content = document.createElement("p");
-  heading.textContent = title;
-  content.textContent = value;
-  elements.wordDetailContent.append(heading, content);
-}
-
-function appendWordDetailList(title, values) {
-  if (!values.length) {
-    return;
-  }
-  const heading = document.createElement("h3");
-  const list = document.createElement("ul");
-  heading.textContent = title;
-  for (const value of values) {
-    const item = document.createElement("li");
-    item.textContent = value;
-    list.append(item);
-  }
-  elements.wordDetailContent.append(heading, list);
-}
-
 function closeWordDetail() {
   elements.wordDetailModal.hidden = true;
+  elements.siteHeader.removeAttribute("inert");
+  elements.practiceMain.removeAttribute("inert");
+  elements.wordbookMain.removeAttribute("inert");
+  elements.vocabularyManagerMain.removeAttribute("inert");
+  document.body.classList.remove("modal-open");
   renderRoundControls();
 }
 

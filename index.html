@@ -107,6 +107,9 @@
               </div>
               <button id="next-question" class="button button-primary" type="button" hidden>下一题</button>
             </div>
+            <div class="question-details-row">
+              <button id="view-question-details" class="word-detail-trigger" type="button" hidden>查看单词详情</button>
+            </div>
           </section>
         </div>
 
@@ -266,13 +269,11 @@
       class="completion-modal"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="word-detail-title"
+      aria-label="词条详情"
       hidden
     >
       <section class="completion-card word-detail-card">
         <button id="close-word-detail" class="word-detail-close" type="button" aria-label="关闭单词详情">×</button>
-        <span class="section-kicker">单词注释</span>
-        <h2 id="word-detail-title"></h2>
         <div id="word-detail-content" class="word-detail-content"></div>
       </section>
     </div>
@@ -325,6 +326,6 @@
       </section>
     </div>
 
-    <script type="module" src="./js/app.js?v=8.1"></script>
+    <script type="module" src="./js/app.js?v=8.2"></script>
   </body>
 </html>
