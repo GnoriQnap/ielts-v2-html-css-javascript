@@ -37,7 +37,7 @@ const fakeDocument = {
   }
 };
 
-test("vocabulary card opens with mobile-first header, content, and footer", () => {
+test("vocabulary card opens with modal header, scrollable content, and footer", () => {
   const card = createVocabularyCard({
     displayText: "sustain",
     details: createDefaultWordDetails(),
@@ -47,7 +47,6 @@ test("vocabulary card opens with mobile-first header, content, and footer", () =
   assert.equal(card.className, "vocabulary-card");
   assert.deepEqual(card.children.map((child) => child.tagName), ["header", "main", "footer"]);
   assert.deepEqual(collectText(card), [
-    "← 返回",
     "词条详情",
     "sustain",
     "暂未添加单词详情",
@@ -55,7 +54,7 @@ test("vocabulary card opens with mobile-first header, content, and footer", () =
   ]);
 });
 
-test("both card actions close and can restore the calling page", () => {
+test("the single footer action closes and can restore the calling page", () => {
   let closeCount = 0;
   const card = createVocabularyCard({
     displayText: "idea",
@@ -65,9 +64,9 @@ test("both card actions close and can restore the calling page", () => {
   });
   const closeActions = findByDataset(card, "vocabularyCardClose");
 
-  assert.equal(closeActions.length, 2);
-  closeActions.forEach((button) => button.click());
-  assert.equal(closeCount, 2);
+  assert.equal(closeActions.length, 1);
+  closeActions[0].click();
+  assert.equal(closeCount, 1);
 });
 
 test("practice, wordbook, and manager inputs reuse the same vocabulary card", () => {

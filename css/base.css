@@ -21,6 +21,7 @@
 html { min-width: 0; scroll-behavior: smooth; }
 body { margin: 0; min-width: 0; overflow-x: hidden; background: #f4f6f8; }
 body.modal-open { overflow: hidden; }
+body.vocabulary-card-open { overflow: hidden; }
 button, select, input { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
@@ -743,13 +744,14 @@ h1, h2, p { margin-top: 0; }
 .category-create-launcher {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   min-height: 62px;
   padding: 12px 28px;
   gap: 16px;
   border-bottom: 1px solid #e7ebef;
   background: #fafbfc;
 }
+.category-create-launcher > #toggle-add-category { min-width: 132px; }
 .category-create-launcher-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
 .category-create-form-expanded {
   grid-template-columns: minmax(220px, 0.7fr) minmax(360px, 1.5fr);
@@ -868,51 +870,56 @@ h1, h2, p { margin-top: 0; }
   position: fixed;
   z-index: 1100;
   inset: 0;
+  display: grid;
+  padding: 20px;
+  place-items: center;
   overflow: hidden;
-  background: #f3f6f4;
+  background: rgb(18 33 49 / 62%);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
 }
-.vocabulary-card-host { width: 100%; height: 100%; }
+.vocabulary-card-overlay[hidden] { display: none !important; }
+.vocabulary-card-host {
+  width: min(88vw, 430px);
+  height: min(74vh, calc(88vw + 96px), 520px);
+  height: min(74dvh, calc(88vw + 96px), 520px);
+  min-height: 0;
+}
 .vocabulary-card {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   width: 100%;
-  height: 100dvh;
+  height: 100%;
   min-width: 0;
+  overflow: hidden;
+  border: 1px solid #cfe2d7;
+  border-radius: 18px;
   background: #fff;
+  box-shadow: 0 24px 70px rgb(11 35 24 / 30%);
   color: #435267;
   line-height: 1.65;
 }
 .vocabulary-card-header {
-  display: grid;
+  display: flex;
   z-index: 1;
-  grid-template-columns: minmax(72px, auto) minmax(0, 1fr) minmax(72px, auto);
   align-items: center;
+  justify-content: center;
   min-height: 58px;
-  padding: max(8px, env(safe-area-inset-top)) 16px 8px;
+  padding: 10px 16px;
   border-bottom: 1px solid #e5ebe8;
   background: rgb(255 255 255 / 96%);
 }
-.vocabulary-card-back {
-  justify-self: start;
-  min-height: 42px;
-  padding: 8px 4px;
-  border: 0;
-  background: transparent;
-  color: var(--green-dark);
-  cursor: pointer;
-  font: inherit;
-  font-weight: 800;
-}
 .vocabulary-card-title { margin: 0; color: var(--ink); font-size: 17px; text-align: center; }
-.vocabulary-card-header-balance { width: 72px; }
 .vocabulary-card-content {
   min-width: 0;
-  padding: 28px 20px 36px;
+  min-height: 0;
+  padding: 24px 20px 32px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
 .vocabulary-card-footer {
-  padding: 12px 20px max(12px, env(safe-area-inset-bottom));
+  padding: 12px 20px;
   border-top: 1px solid #e5ebe8;
   background: rgb(255 255 255 / 97%);
 }
@@ -976,18 +983,11 @@ h1, h2, p { margin-top: 0; }
 
 @media (min-width: 768px) {
   .vocabulary-card-overlay {
-    display: grid;
     padding: 32px;
-    place-items: center;
     background: rgb(18 33 49 / 58%);
-    backdrop-filter: blur(2px);
   }
   .vocabulary-card-host { width: min(100%, 720px); height: min(90dvh, 900px); }
   .vocabulary-card {
-    height: 100%;
-    overflow: hidden;
-    border: 1px solid #cfe2d7;
-    border-radius: 18px;
     box-shadow: 0 24px 70px rgb(11 35 24 / 26%);
   }
   .vocabulary-card-content { padding: 38px 54px 48px; }
@@ -1203,6 +1203,7 @@ h1, h2, p { margin-top: 0; }
   .word-manager-edit-actions { justify-content: flex-end; }
   .word-manager-edit-actions .button { min-width: 76px; }
   .category-create-launcher { min-height: 56px; padding: 10px 16px; }
+  .category-create-launcher > #toggle-add-category { width: 100%; }
   .category-create-launcher-actions { min-width: 0; flex-wrap: wrap; }
   .category-create-form-expanded { grid-template-columns: 1fr; padding: 14px 16px; gap: 14px; }
   .category-create-actions { grid-column: auto; }

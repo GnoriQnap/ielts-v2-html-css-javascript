@@ -14,12 +14,13 @@ export function createVocabularyCard({
   }
 
   const card = createElement(documentRef, "article", "vocabulary-card");
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-modal", "true");
+  card.setAttribute("aria-labelledby", "vocabulary-card-title");
   const header = createElement(documentRef, "header", "vocabulary-card-header");
-  const back = createActionButton(documentRef, "← 返回", "vocabulary-card-back", onClose);
   const heading = createElement(documentRef, "h1", "vocabulary-card-title", "词条详情");
-  const headerBalance = createElement(documentRef, "span", "vocabulary-card-header-balance");
-  headerBalance.setAttribute("aria-hidden", "true");
-  header.append(back, heading, headerBalance);
+  heading.id = "vocabulary-card-title";
+  header.append(heading);
 
   const content = createElement(documentRef, "main", "vocabulary-card-content");
   content.append(createVocabularyDetailsView({ displayText, details, documentRef }));

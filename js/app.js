@@ -71,7 +71,10 @@ import {
   filterWordbookEntries,
   WORDBOOK_FILTERS
 } from "./core/wordbook-service.js?v=8.2";
-import { createVocabularyCard } from "./ui/vocabulary-card.js?v=8.3";
+import { createVocabularyCard } from "./ui/vocabulary-card.js?v=8.3.2";
+import {
+  createVocabularyCardOverlayController
+} from "./ui/vocabulary-card-overlay.js?v=8.3.1";
 
 const vocabularyRepository = createVocabularyRepository({
   fallbackVocabulary: vocabularyData,
@@ -144,8 +147,8 @@ const elements = {
   wordbookNotice: document.querySelector("#wordbook-notice"),
   wordbookList: document.querySelector("#wordbook-list"),
   wordbookEmpty: document.querySelector("#wordbook-empty"),
-  wordDetailModal: document.querySelector("#word-detail-modal"),
-  wordDetailContent: document.querySelector("#word-detail-content"),
+  vocabularyCardOverlay: document.querySelector("#vocabulary-card-overlay"),
+  vocabularyCardHost: document.querySelector("#vocabulary-card-host"),
   vocabularyManagerBack: document.querySelector("#vocabulary-manager-back"),
   toggleAddCategory: document.querySelector("#toggle-add-category"),
   importVocabulary: document.querySelector("#import-vocabulary"),
@@ -197,9 +200,21 @@ let editingCategoryWordKey = null;
 let addingWordGroupId = null;
 let pendingVocabularyDeleteAction = null;
 let pendingVocabularyImport = null;
-let vocabularyCardReturnFocusElement = null;
 const expandedManagerGroupIds = new Set();
 let editingWordKey = null;
+
+const vocabularyCardOverlayController = createVocabularyCardOverlayController({
+  overlay: elements.vocabularyCardOverlay,
+  host: elements.vocabularyCardHost,
+  body: document.body,
+  backgroundElements: [
+    elements.siteHeader,
+    elements.practiceMain,
+    elements.wordbookMain,
+    elements.vocabularyManagerMain
+  ],
+  documentRef: document
+});
 
 elements.submit.addEventListener("click", submitAnswer);
 elements.markReview.addEventListener("click", () => chooseMasteryStatus(LEARNING_STATUSES.REVIEW));
@@ -2464,33 +2479,22 @@ function openVocabularyDetails(wordKey) {
   if (!displayText) {
     return;
   }
-  vocabularyCardReturnFocusElement = document.activeElement;
-  elements.wordDetailContent.replaceChildren(createVocabularyCard({
-    displayText,
-    details: vocabularyRepository.getWordDetails(wordKey),
-    onClose: closeWordDetail
-  }));
-  elements.wordDetailModal.hidden = false;
-  elements.siteHeader.setAttribute("inert", "");
-  elements.practiceMain.setAttribute("inert", "");
-  elements.wordbookMain.setAttribute("inert", "");
-  elements.vocabularyManagerMain.setAttribute("inert", "");
-  document.body.classList.add("modal-open");
-  elements.wordDetailContent.querySelector("[data-vocabulary-card-close]")?.focus();
+  const returnFocusElement = document.activeElement;
+  try {
+    const card = createVocabularyCard({
+      displayText,
+      details: vocabularyRepository.getWordDetails(wordKey),
+      onClose: closeWordDetail
+    });
+    vocabularyCardOverlayController.open(card, { returnFocusElement });
+  } catch {
+    vocabularyCardOverlayController.close({ restoreFocus: true });
+  }
 }
 
 function closeWordDetail() {
-  elements.wordDetailModal.hidden = true;
-  elements.siteHeader.removeAttribute("inert");
-  elements.practiceMain.removeAttribute("inert");
-  elements.wordbookMain.removeAttribute("inert");
-  elements.vocabularyManagerMain.removeAttribute("inert");
-  document.body.classList.remove("modal-open");
+  vocabularyCardOverlayController.close();
   renderRoundControls();
-  if (vocabularyCardReturnFocusElement?.isConnected) {
-    vocabularyCardReturnFocusElement.focus();
-  }
-  vocabularyCardReturnFocusElement = null;
 }
 
 function persistState() {

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="IELTS 英语词汇语义分类练习">
     <title>IELTS 同义替换练习</title>
-    <link rel="stylesheet" href="./css/base.css">
+    <link rel="stylesheet" href="./css/base.css?v=8.3.2b">
   </head>
   <body>
     <header id="site-header" class="topbar">
@@ -181,13 +181,12 @@
 
         <section id="category-manager-section">
           <div class="category-create-launcher">
-            <strong>新增分类</strong>
-            <div class="category-create-launcher-actions">
+            <div class="category-create-launcher-actions" hidden>
               <button id="import-vocabulary" class="button button-quiet button-compact" type="button">导入词库</button>
               <input id="vocabulary-import-input" type="file" accept=".json,application/json" hidden>
               <button id="export-vocabulary" class="button button-quiet button-compact" type="button">导出词库</button>
-              <button id="toggle-add-category" class="button button-primary button-compact" type="button">新增分类</button>
             </div>
+            <button id="toggle-add-category" class="button button-primary button-compact" type="button">新增分类</button>
           </div>
 
           <form id="add-category-form" class="category-create-form category-create-form-expanded" novalidate hidden>
@@ -265,14 +264,12 @@
     </div>
 
     <div
-      id="word-detail-modal"
+      id="vocabulary-card-overlay"
       class="vocabulary-card-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-label="词条详情"
       hidden
+      aria-hidden="true"
     >
-      <div id="word-detail-content" class="vocabulary-card-host"></div>
+      <div id="vocabulary-card-host" class="vocabulary-card-host"></div>
     </div>
 
     <div
@@ -323,6 +320,6 @@
       </section>
     </div>
 
-    <script type="module" src="./js/app.js?v=8.3"></script>
+    <script type="module" src="./js/app.js?v=8.3.2"></script>
   </body>
 </html>
