@@ -125,3 +125,77 @@ test("validator, question engine, and wordbook consume the repository vocabulary
   assert.equal(question.options.length, 6);
   assert.deepEqual(critical.categories.map(({ groupId }) => groupId), [1, 2]);
 });
+
+test("a word without stored details returns the complete empty details structure", () => {
+  const repository = createVocabularyRepository({
+    storage: new MemoryStorage(),
+    fallbackVocabulary
+  });
+  repository.load();
+
+  assert.deepEqual(repository.getWordDetails("critical"), {
+    phonetics: { uk: "", us: "" },
+    meanings: [],
+    collocations: [],
+    examples: [],
+    notes: "",
+    source: "",
+    updatedAt: ""
+  });
+});
+
+test("setWordDetails saves normalized details and survives repository reload", () => {
+  const storage = new MemoryStorage();
+  const repository = createVocabularyRepository({ storage, fallbackVocabulary });
+  repository.load();
+  const details = {
+    phonetics: { uk: "/ˈkrɪtɪkəl/", us: "/ˈkrɪtɪkəl/" },
+    meanings: [{ partOfSpeech: "adjective", definitionZh: "关键的" }],
+    collocations: ["critical issue"],
+    examples: [{ en: "This is critical.", zh: "这很关键。" }],
+    notes: "IELTS 高频词",
+    source: "teacher",
+    updatedAt: "2026-07-22T10:00:00.000Z"
+  };
+
+  repository.setWordDetails("critical", details);
+  const reloaded = createVocabularyRepository({ storage, fallbackVocabulary });
+  reloaded.load();
+
+  assert.deepEqual(reloaded.getWordDetails("critical"), details);
+  assert.deepEqual(
+    reloaded.getCurrentVocabulary().word_details.critical,
+    details
+  );
+});
+
+test("word details inputs and outputs are deep copies", () => {
+  const repository = createVocabularyRepository({
+    storage: new MemoryStorage(),
+    fallbackVocabulary
+  });
+  repository.load();
+  const input = {
+    phonetics: { uk: "/test/" },
+    meanings: [{ definitionZh: "测试" }],
+    collocations: ["test case"],
+    examples: [{ en: "A test." }]
+  };
+
+  const saved = repository.setWordDetails("study", input);
+  input.phonetics.uk = "/changed/";
+  input.meanings[0].definitionZh = "已修改";
+  saved.collocations.push("changed");
+  const firstRead = repository.getWordDetails("study");
+  firstRead.examples[0].en = "Changed.";
+
+  assert.deepEqual(repository.getWordDetails("study"), {
+    phonetics: { uk: "/test/", us: "" },
+    meanings: [{ partOfSpeech: "", definitionZh: "测试" }],
+    collocations: ["test case"],
+    examples: [{ en: "A test.", zh: "" }],
+    notes: "",
+    source: "",
+    updatedAt: ""
+  });
+});

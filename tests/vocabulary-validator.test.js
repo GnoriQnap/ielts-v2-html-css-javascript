@@ -56,3 +56,55 @@ test("validator blocks vocabularies with fewer than six categories", () => {
   assert.equal(report.isValid, false);
   assert.ok(report.errors.some((item) => item.code === "INSUFFICIENT_GROUPS"));
 });
+
+test("validator accepts vocabularies without word details", () => {
+  const data = structuredClone(vocabularyData);
+  delete data.word_details;
+
+  assert.equal(validateVocabularyData(data).isValid, true);
+});
+
+test("validator accepts complete and partial legal word details", () => {
+  const data = structuredClone(vocabularyData);
+  data.word_details = {
+    idea: {
+      phonetics: { uk: "/aɪˈdɪə/", us: "/aɪˈdiːə/" },
+      meanings: [{ partOfSpeech: "noun", definitionZh: "想法" }],
+      collocations: ["good idea"],
+      examples: [{ en: "That is a good idea.", zh: "那是个好主意。" }],
+      notes: "",
+      source: "teacher",
+      updatedAt: "2026-07-22T10:00:00.000Z"
+    },
+    concept: {
+      meanings: [{ definitionZh: "概念" }],
+      examples: [{ en: "A useful concept." }]
+    }
+  };
+
+  assert.equal(validateVocabularyData(data).isValid, true);
+});
+
+test("validator rejects illegal word details field types and orphan identities", () => {
+  const data = structuredClone(vocabularyData);
+  data.word_details = {
+    idea: {
+      phonetics: "invalid",
+      meanings: [{ partOfSpeech: 1 }],
+      collocations: ["valid", 2],
+      examples: ["invalid"],
+      notes: [],
+      source: 3,
+      updatedAt: "not-an-iso-date"
+    },
+    "missing-word": {}
+  };
+  const report = validateVocabularyData(data);
+
+  assert.equal(report.isValid, false);
+  assert.ok(report.errors.some((item) => item.code === "INVALID_DETAILS_PHONETICS"));
+  assert.ok(report.errors.some((item) => item.code === "INVALID_DETAILS_ARRAY_ITEM"));
+  assert.ok(report.errors.some((item) => item.code === "INVALID_DETAILS_STRING"));
+  assert.ok(report.errors.some((item) => item.code === "INVALID_DETAILS_UPDATED_AT"));
+  assert.ok(report.errors.some((item) => item.code === "ORPHAN_WORD_DETAILS"));
+});

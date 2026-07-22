@@ -1,3 +1,10 @@
+import { normalizeWordKey } from "./normalization.js";
+import {
+  createDefaultWordDetails,
+  normalizeVocabularyDetails,
+  requireVocabularyDetails
+} from "./vocabulary-details.js";
+
 export const VOCABULARY_STORAGE_KEY = "ielts_synonym_trainer_vocabulary";
 export const VOCABULARY_CACHE_SCHEMA_VERSION = 1;
 
@@ -10,6 +17,17 @@ export function createVocabularyRepository(options = {}) {
   } = options;
   const fallback = requireVocabularyData(fallbackVocabulary);
   let currentVocabulary = null;
+
+  function saveCurrentVocabulary(vocabulary) {
+    const nextVocabulary = requireVocabularyData(vocabulary);
+    const cached = createVocabularyCache(nextVocabulary, now);
+
+    if (storage?.setItem) {
+      storage.setItem(VOCABULARY_STORAGE_KEY, JSON.stringify(cached));
+    }
+    currentVocabulary = cached.vocabulary;
+    return clonePlain(currentVocabulary);
+  }
 
   return {
     load() {
@@ -25,18 +43,33 @@ export function createVocabularyRepository(options = {}) {
     },
 
     save(vocabulary) {
-      const nextVocabulary = requireVocabularyData(vocabulary);
-      const cached = createVocabularyCache(nextVocabulary, now);
-
-      if (storage?.setItem) {
-        storage.setItem(VOCABULARY_STORAGE_KEY, JSON.stringify(cached));
-      }
-      currentVocabulary = cached.vocabulary;
-      return clonePlain(currentVocabulary);
+      return saveCurrentVocabulary(vocabulary);
     },
 
     getCurrentVocabulary() {
       return currentVocabulary ? clonePlain(currentVocabulary) : null;
+    },
+
+    getWordDetails(wordKeyValue) {
+      const wordKey = requireExistingWordKey(currentVocabulary, wordKeyValue);
+      const details = getWordDetailsMap(currentVocabulary)[wordKey];
+      return details
+        ? normalizeVocabularyDetails(details)
+        : createDefaultWordDetails();
+    },
+
+    setWordDetails(wordKeyValue, details) {
+      const wordKey = requireExistingWordKey(currentVocabulary, wordKeyValue);
+      const normalizedDetails = requireVocabularyDetails(details);
+      const nextVocabulary = {
+        ...currentVocabulary,
+        word_details: {
+          ...getWordDetailsMap(currentVocabulary),
+          [wordKey]: normalizedDetails
+        }
+      };
+      saveCurrentVocabulary(nextVocabulary);
+      return clonePlain(normalizedDetails);
     }
   };
 }
@@ -135,6 +168,29 @@ function isVocabularyData(candidate) {
     !Array.isArray(candidate) &&
     Array.isArray(candidate.vocabulary_list)
   );
+}
+
+function requireExistingWordKey(vocabulary, wordKeyValue) {
+  if (!vocabulary) {
+    throw new Error("请先加载词库。");
+  }
+  const wordKey = normalizeWordKey(wordKeyValue);
+  const exists = vocabulary.vocabulary_list.some((group) => (
+    Array.isArray(group?.words) &&
+    group.words.some((word) => normalizeWordKey(word) === wordKey)
+  ));
+  if (!wordKey || !exists) {
+    throw new RangeError("词条不存在。");
+  }
+  return wordKey;
+}
+
+function getWordDetailsMap(vocabulary) {
+  return vocabulary?.word_details &&
+    typeof vocabulary.word_details === "object" &&
+    !Array.isArray(vocabulary.word_details)
+    ? vocabulary.word_details
+    : {};
 }
 
 function clonePlain(value) {

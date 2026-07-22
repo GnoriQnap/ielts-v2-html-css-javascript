@@ -1,6 +1,7 @@
 import { normalizeCategoryName, normalizeWordKey } from "./normalization.js";
 import { createVocabularyIndex } from "./vocabulary-index.js";
 import { DEFAULT_OPTION_COUNT } from "./question-engine.js";
+import { validateVocabularyDetails } from "./vocabulary-details.js";
 
 function issue(code, message, context = {}) {
   return { code, message, context };
@@ -109,6 +110,8 @@ export function validateVocabularyData(data) {
     }
   }
 
+  validateWordDetailsMap(data?.word_details, index, errors);
+
   if (index.groupById.size < DEFAULT_OPTION_COUNT) {
     errors.push(issue("INSUFFICIENT_GROUPS", `有效分类只有 ${index.groupById.size} 个，无法生成 ${DEFAULT_OPTION_COUNT} 个选项。`, { validGroupCount: index.groupById.size }));
   }
@@ -133,6 +136,53 @@ export function validateVocabularyData(data) {
     },
     index
   };
+}
+
+function validateWordDetailsMap(candidate, index, errors) {
+  if (candidate === undefined) {
+    return;
+  }
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+    errors.push(issue("INVALID_WORD_DETAILS", "word_details 必须是以 wordKey 为键的对象。"));
+    return;
+  }
+
+  const normalizedKeys = new Set();
+  for (const [detailWordKey, details] of Object.entries(candidate)) {
+    const wordKey = normalizeWordKey(detailWordKey);
+    if (!wordKey || wordKey !== detailWordKey) {
+      errors.push(issue(
+        "INVALID_WORD_DETAILS_KEY",
+        `word_details 的键“${detailWordKey}”不是规范 wordKey。`,
+        { detailWordKey, wordKey }
+      ));
+      continue;
+    }
+    if (normalizedKeys.has(wordKey)) {
+      errors.push(issue(
+        "DUPLICATE_WORD_DETAILS_KEY",
+        `word_details 中的 wordKey“${wordKey}”重复。`,
+        { wordKey }
+      ));
+      continue;
+    }
+    normalizedKeys.add(wordKey);
+    if (!index.displayByWordKey.has(wordKey)) {
+      errors.push(issue(
+        "ORPHAN_WORD_DETAILS",
+        `word_details 中的 wordKey“${wordKey}”不在词库中。`,
+        { wordKey }
+      ));
+      continue;
+    }
+    for (const detailError of validateVocabularyDetails(details)) {
+      errors.push(issue(
+        detailError.code,
+        `词条“${wordKey}”的 ${detailError.message}`,
+        { wordKey }
+      ));
+    }
+  }
 }
 
 function emptySummary() {

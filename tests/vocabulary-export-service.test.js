@@ -32,10 +32,13 @@ const vocabulary = {
   ],
   word_details: {
     critical: {
-      phonetic: "",
-      definition: "关键的",
-      collocations: [],
-      examples: []
+      phonetics: { uk: "/ˈkrɪtɪkəl/", us: "/ˈkrɪtɪkəl/" },
+      meanings: [{ partOfSpeech: "adjective", definitionZh: "关键的" }],
+      collocations: ["critical issue"],
+      examples: [{ en: "This is critical.", zh: "这很关键。" }],
+      notes: "",
+      source: "teacher",
+      updatedAt: "2026-07-22T10:00:00.000Z"
     }
   }
 };
@@ -84,7 +87,7 @@ test("building export data cannot mutate repository vocabulary", () => {
   const exported = buildVocabularyExport(repository);
 
   exported.vocabulary_list[0].category = "导出副本修改";
-  exported.word_details.critical.definition = "changed";
+  exported.word_details.critical.meanings[0].definitionZh = "changed";
 
   assert.deepEqual(repository.getCurrentVocabulary(), before);
 });

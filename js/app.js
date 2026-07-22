@@ -1,5 +1,5 @@
 import { vocabularyData } from "./data/vocabulary.js";
-import { validateVocabularyData } from "./core/vocabulary-validator.js";
+import { validateVocabularyData } from "./core/vocabulary-validator.js?v=8.1";
 import {
   createQuestion,
   getEligibleWordKeys,
@@ -19,7 +19,7 @@ import {
   saveAppState,
   STORAGE_KEY
 } from "./core/storage.js?v=7.3b";
-import { createVocabularyRepository } from "./core/vocabulary-repository.js?v=7.1";
+import { createVocabularyRepository } from "./core/vocabulary-repository.js?v=8.1";
 import { downloadVocabularyExport } from "./core/vocabulary-export-service.js?v=7.3a";
 import {
   assertVocabularyImportAllowed,
@@ -2241,12 +2241,15 @@ function handleWordbookFilter(event) {
 }
 
 function renderWordbook() {
-  const annotations = currentVocabulary.word_details ?? currentVocabulary.wordDetails ?? {};
-  const entries = createWordbookEntries(report.index, appState.learning, annotations);
+  const entries = createWordbookEntries(report.index, appState.learning, vocabularyRepository);
   const isCategoryTree = wordbookFilter === WORDBOOK_FILTERS.ALL && !wordbookQuery.trim();
   elements.clearWordbookSearch.hidden = !wordbookQuery;
   if (isCategoryTree) {
-    const categoryTree = createWordbookCategoryTree(report.index, appState.learning, annotations);
+    const categoryTree = createWordbookCategoryTree(
+      report.index,
+      appState.learning,
+      vocabularyRepository
+    );
     renderWordbookCategoryTree(categoryTree);
     elements.wordbookResultCount.textContent = `${categoryTree.length} 个分类`;
     elements.wordbookEmpty.hidden = categoryTree.length > 0;
@@ -2440,8 +2443,7 @@ function handleWordbookListClick(event) {
 }
 
 function openWordDetail(wordKey) {
-  const annotations = currentVocabulary.word_details ?? currentVocabulary.wordDetails ?? {};
-  const entry = createWordbookEntries(report.index, appState.learning, annotations)
+  const entry = createWordbookEntries(report.index, appState.learning, vocabularyRepository)
     .find((item) => item.wordKey === wordKey);
   if (!entry) {
     return;
@@ -2455,10 +2457,28 @@ function openWordDetail(wordKey) {
     empty.textContent = "暂未添加单词注释";
     elements.wordDetailContent.append(empty);
   } else {
-    appendWordDetail("音标", entry.details.phonetic);
-    appendWordDetail("释义", entry.details.definition);
+    appendWordDetail(
+      "音标",
+      [
+        entry.details.phonetics.uk ? `UK ${entry.details.phonetics.uk}` : "",
+        entry.details.phonetics.us ? `US ${entry.details.phonetics.us}` : ""
+      ].filter(Boolean).join(" · ")
+    );
+    appendWordDetailList(
+      "释义",
+      entry.details.meanings.map((meaning) => (
+        [meaning.partOfSpeech, meaning.definitionZh].filter(Boolean).join(" ")
+      )).filter(Boolean)
+    );
     appendWordDetailList("常用搭配", entry.details.collocations);
-    appendWordDetailList("例句", entry.details.examples);
+    appendWordDetailList(
+      "例句",
+      entry.details.examples.map((example) => (
+        [example.en, example.zh].filter(Boolean).join(" — ")
+      )).filter(Boolean)
+    );
+    appendWordDetail("备注", entry.details.notes);
+    appendWordDetail("来源", entry.details.source);
   }
   elements.wordDetailModal.hidden = false;
   elements.siteHeader.setAttribute("inert", "");

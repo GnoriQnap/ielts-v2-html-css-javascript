@@ -77,6 +77,69 @@ test("the official baseline vocabulary imports with 98 categories and 1119 uniqu
   });
 });
 
+test("legacy JSON without word details imports normally", () => {
+  const imported = vocabularyWith("legacy-word", "旧文件分类");
+  const repository = createLoadedRepository();
+  const result = commitVocabularyImport(
+    repository,
+    prepareVocabularyImportText(JSON.stringify(imported))
+  );
+
+  assert.deepEqual(result.vocabulary, imported);
+  assert.equal("word_details" in result.vocabulary, false);
+});
+
+test("legacy word annotations remain importable without rewriting their stored shape", () => {
+  const imported = vocabularyWith("legacy-detailed-word", "旧注释分类");
+  imported.word_details = {
+    "legacy-detailed-word": {
+      phonetic: "/legacy/",
+      definition: "旧释义",
+      collocations: ["legacy phrase"],
+      examples: ["A legacy example."]
+    }
+  };
+  const repository = createLoadedRepository();
+  const result = commitVocabularyImport(
+    repository,
+    prepareVocabularyImportText(JSON.stringify(imported))
+  );
+
+  assert.deepEqual(result.vocabulary.word_details, imported.word_details);
+  assert.deepEqual(repository.getWordDetails("legacy-detailed-word"), {
+    phonetics: { uk: "/legacy/", us: "" },
+    meanings: [{ partOfSpeech: "", definitionZh: "旧释义" }],
+    collocations: ["legacy phrase"],
+    examples: [{ en: "A legacy example.", zh: "" }],
+    notes: "",
+    source: "",
+    updatedAt: ""
+  });
+});
+
+test("JSON with vocabulary details preserves every details field", () => {
+  const imported = vocabularyWith("detailed-word", "详情分类");
+  imported.word_details = {
+    "detailed-word": {
+      phonetics: { uk: "/ˈdiːteɪld/", us: "/dɪˈteɪld/" },
+      meanings: [{ partOfSpeech: "adjective", definitionZh: "详细的" }],
+      collocations: ["detailed report"],
+      examples: [{ en: "Write a detailed report.", zh: "写一份详细报告。" }],
+      notes: "test note",
+      source: "teacher",
+      updatedAt: "2026-07-22T10:00:00.000Z"
+    }
+  };
+  const repository = createLoadedRepository();
+  const result = commitVocabularyImport(
+    repository,
+    prepareVocabularyImportText(JSON.stringify(imported))
+  );
+
+  assert.deepEqual(result.vocabulary.word_details, imported.word_details);
+  assert.deepEqual(repository.getWordDetails("detailed-word"), imported.word_details["detailed-word"]);
+});
+
 test("a successful import fully replaces repository data and exposes the rebuilt index", () => {
   const repository = createLoadedRepository();
   const imported = vocabularyWith("new-word", "新分类");

@@ -151,9 +151,30 @@ test("manual status changes synchronize and can complete an active round", () =>
 
 test("empty and populated static details are detected", () => {
   const index = createVocabularyIndex(vocabulary.vocabulary_list);
-  const entries = createWordbookEntries(index, { byWordKey: {} }, {
-    sustain: { phonetic: "/səˈsteɪn/", examples: ["We must sustain progress."] }
-  });
+  const detailsRepository = {
+    getWordDetails(wordKey) {
+      return wordKey === "sustain"
+        ? {
+          phonetics: { uk: "/səˈsteɪn/", us: "" },
+          meanings: [],
+          collocations: [],
+          examples: [{ en: "We must sustain progress.", zh: "" }],
+          notes: "",
+          source: "",
+          updatedAt: ""
+        }
+        : {
+          phonetics: { uk: "", us: "" },
+          meanings: [],
+          collocations: [],
+          examples: [],
+          notes: "",
+          source: "",
+          updatedAt: ""
+        };
+    }
+  };
+  const entries = createWordbookEntries(index, { byWordKey: {} }, detailsRepository);
 
   assert.equal(hasWordDetails(entries.find((entry) => entry.wordKey === "keep").details), false);
   assert.equal(hasWordDetails(entries.find((entry) => entry.wordKey === "sustain").details), true);

@@ -8,6 +8,7 @@ import {
   completeRound,
   syncRoundWordLearningStatus
 } from "./round-service.js";
+import { createDefaultWordDetails } from "./vocabulary-details.js";
 
 export const WORDBOOK_FILTERS = Object.freeze({
   ALL: "all",
@@ -16,7 +17,7 @@ export const WORDBOOK_FILTERS = Object.freeze({
   REMEMBERED: LEARNING_STATUSES.REMEMBERED
 });
 
-export function createWordbookEntries(index, learning, annotations = {}) {
+export function createWordbookEntries(index, learning, detailsRepository = null) {
   return index.allWordKeys.map((wordKey) => {
     const groupIds = [...(index.groupIdsByWordKey.get(wordKey) ?? [])];
     return {
@@ -27,13 +28,13 @@ export function createWordbookEntries(index, learning, annotations = {}) {
         groupId,
         category: index.groupById.get(groupId)?.category ?? ""
       })),
-      details: normalizeWordDetails(annotations[wordKey])
+      details: readWordDetails(detailsRepository, wordKey)
     };
   });
 }
 
-export function createWordbookCategoryTree(index, learning, annotations = {}) {
-  const entries = createWordbookEntries(index, learning, annotations);
+export function createWordbookCategoryTree(index, learning, detailsRepository = null) {
+  const entries = createWordbookEntries(index, learning, detailsRepository);
   return [...index.groupById.entries()].map(([groupId, group]) => ({
     groupId,
     category: group.category,
@@ -100,25 +101,21 @@ export function applyWordbookStatusChange({ state, wordKey, status, changedAt })
   };
 }
 
-export function normalizeWordDetails(candidate) {
-  const details = candidate && typeof candidate === "object" ? candidate : {};
-  return {
-    phonetic: typeof details.phonetic === "string" ? details.phonetic : "",
-    definition: typeof details.definition === "string" ? details.definition : "",
-    collocations: Array.isArray(details.collocations)
-      ? details.collocations.filter((item) => typeof item === "string" && item.trim())
-      : [],
-    examples: Array.isArray(details.examples)
-      ? details.examples.filter((item) => typeof item === "string" && item.trim())
-      : []
-  };
-}
-
 export function hasWordDetails(details) {
   return Boolean(
-    details?.phonetic ||
-    details?.definition ||
+    details?.phonetics?.uk ||
+    details?.phonetics?.us ||
+    details?.meanings?.some((meaning) => meaning.partOfSpeech || meaning.definitionZh) ||
     details?.collocations?.length ||
-    details?.examples?.length
+    details?.examples?.some((example) => example.en || example.zh) ||
+    details?.notes ||
+    details?.source
   );
+}
+
+function readWordDetails(detailsRepository, wordKey) {
+  if (!detailsRepository || typeof detailsRepository.getWordDetails !== "function") {
+    return createDefaultWordDetails();
+  }
+  return detailsRepository.getWordDetails(wordKey);
 }
