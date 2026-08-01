@@ -17,11 +17,6 @@ export function createVocabularyCard({
   card.setAttribute("role", "dialog");
   card.setAttribute("aria-modal", "true");
   card.setAttribute("aria-labelledby", "vocabulary-card-title");
-  const header = createElement(documentRef, "header", "vocabulary-card-header");
-  const heading = createElement(documentRef, "h1", "vocabulary-card-title", "词条详情");
-  heading.id = "vocabulary-card-title";
-  header.append(heading);
-
   const content = createElement(documentRef, "main", "vocabulary-card-content");
   content.append(createVocabularyDetailsView({ displayText, details, documentRef }));
 
@@ -33,7 +28,7 @@ export function createVocabularyCard({
     onClose
   ));
 
-  card.append(header, content, footer);
+  card.append(content, footer);
   return card;
 }
 

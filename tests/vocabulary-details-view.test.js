@@ -50,13 +50,69 @@ test("viewer model includes every complete details section in display order", ()
   const model = createVocabularyDetailsViewModel({ displayText: "idea", details: completeDetails });
 
   assert.equal(model.displayText, "idea");
-  assert.deepEqual(model.phonetics.map(({ label }) => label), ["英式音标", "美式音标"]);
+  assert.equal(model.phoneticUs, "/aɪˈdiːə/");
   assert.equal(model.meanings[0].definitionZh, "想法");
   assert.deepEqual(model.collocations, ["good idea"]);
   assert.equal(model.examples[0].zh, "那是个好主意。");
   assert.equal(model.notes, "IELTS 高频词");
   assert.equal(model.source, "teacher");
   assert.equal(model.isEmpty, false);
+});
+
+test("viewer uses final labels and strips collocation separators", () => {
+  const view = createVocabularyDetailsView({
+    displayText: "point",
+    details: {
+      ...createDefaultWordDetails(),
+      phonetics: { uk: "/ignored/", us: "/pɔɪnt/" },
+      meanings: [{ partOfSpeech: "n.", definitionZh: "观点；要点" }],
+      collocations: ["make a point —— 提出观点"],
+      examples: [{ en: "I take your point.", zh: "我明白你的意思。" }]
+    },
+    documentRef: fakeDocument
+  });
+  const text = collectText(view);
+  for (const forbidden of ["英式音标", "美式音标", "中文释义", "常用搭配", "/ignored/"]) {
+    assert.equal(text.includes(forbidden), false);
+  }
+  assert.equal(text.includes("搭配"), true);
+  assert.equal(text.includes("例句"), true);
+  assert.equal(text.includes("/pɔɪnt/"), true);
+  assert.equal(text.includes("make a point\u00A0\u00A0提出观点"), true);
+});
+
+test("viewer formats both imported single and doubled dash collocation separators", () => {
+  const model = createVocabularyDetailsViewModel({
+    displayText: "point",
+    details: {
+      ...createDefaultWordDetails(),
+      collocations: [
+        "point of view — 观点",
+        "make a point —— 提出观点",
+        "well-known phrase"
+      ]
+    }
+  });
+
+  assert.deepEqual(model.collocations, [
+    "point of view\u00A0\u00A0观点",
+    "make a point\u00A0\u00A0提出观点",
+    "well-known phrase"
+  ]);
+});
+
+test("viewer treats hidden metadata-only details as empty", () => {
+  const view = createVocabularyDetailsView({
+    displayText: "idea",
+    details: {
+      ...createDefaultWordDetails(),
+      notes: "internal note",
+      source: "internal source"
+    },
+    documentRef: fakeDocument
+  });
+
+  assert.deepEqual(collectText(view), ["idea", "暂未添加单词详情"]);
 });
 
 test("viewer preserves multiple meanings", () => {

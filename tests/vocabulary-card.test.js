@@ -37,7 +37,7 @@ const fakeDocument = {
   }
 };
 
-test("vocabulary card opens with modal header, scrollable content, and footer", () => {
+test("vocabulary card opens with word-first scrollable content and footer", () => {
   const card = createVocabularyCard({
     displayText: "sustain",
     details: createDefaultWordDetails(),
@@ -45,9 +45,8 @@ test("vocabulary card opens with modal header, scrollable content, and footer", 
   });
 
   assert.equal(card.className, "vocabulary-card");
-  assert.deepEqual(card.children.map((child) => child.tagName), ["header", "main", "footer"]);
+  assert.deepEqual(card.children.map((child) => child.tagName), ["main", "footer"]);
   assert.deepEqual(collectText(card), [
-    "词条详情",
     "sustain",
     "暂未添加单词详情",
     "关闭"

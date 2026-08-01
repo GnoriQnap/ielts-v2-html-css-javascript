@@ -176,7 +176,7 @@ test("imported details are immediately readable by the Vocabulary Card view mode
 
   assert.equal(model.isEmpty, false);
   assert.equal(model.meanings[0].definitionZh, "想法；观点");
-  assert.deepEqual(model.collocations, ["have an idea — 有一个想法"]);
+  assert.deepEqual(model.collocations, ["have an idea\u00A0\u00A0有一个想法"]);
   assert.equal(model.examples[0].en, "She came up with a new idea.");
 });
 

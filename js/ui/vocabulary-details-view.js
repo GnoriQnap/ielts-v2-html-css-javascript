@@ -1,8 +1,5 @@
 export function createVocabularyDetailsViewModel({ displayText, details }) {
-  const phonetics = [
-    { label: "英式音标", value: details?.phonetics?.uk ?? "" },
-    { label: "美式音标", value: details?.phonetics?.us ?? "" }
-  ].filter((item) => item.value);
+  const phoneticUs = details?.phonetics?.us ?? "";
   const meanings = Array.isArray(details?.meanings)
     ? details.meanings
       .map((meaning) => ({
@@ -12,7 +9,7 @@ export function createVocabularyDetailsViewModel({ displayText, details }) {
       .filter((meaning) => meaning.partOfSpeech || meaning.definitionZh)
     : [];
   const collocations = Array.isArray(details?.collocations)
-    ? details.collocations.filter(Boolean)
+    ? details.collocations.filter(Boolean).map(formatCollocation)
     : [];
   const examples = Array.isArray(details?.examples)
     ? details.examples
@@ -24,19 +21,17 @@ export function createVocabularyDetailsViewModel({ displayText, details }) {
 
   return {
     displayText: String(displayText ?? ""),
-    phonetics,
+    phoneticUs,
     meanings,
     collocations,
     examples,
     notes,
     source,
     isEmpty: (
-      phonetics.length === 0 &&
+      !phoneticUs &&
       meanings.length === 0 &&
       collocations.length === 0 &&
-      examples.length === 0 &&
-      !notes &&
-      !source
+      examples.length === 0
     )
   };
 }
@@ -51,7 +46,8 @@ export function createVocabularyDetailsView({
   }
   const model = createVocabularyDetailsViewModel({ displayText, details });
   const view = createElement(documentRef, "article", "vocabulary-details-view");
-  const title = createElement(documentRef, "h2", "vocabulary-details-word", model.displayText);
+  const title = createElement(documentRef, "h1", "vocabulary-details-word", model.displayText);
+  title.id = "vocabulary-card-title";
   view.append(title);
 
   if (model.isEmpty) {
@@ -64,16 +60,11 @@ export function createVocabularyDetailsView({
     return view;
   }
 
-  for (const phonetic of model.phonetics) {
-    const row = createElement(documentRef, "div", "vocabulary-details-phonetic");
-    row.append(
-      createElement(documentRef, "span", "vocabulary-details-label", phonetic.label),
-      createElement(documentRef, "span", "vocabulary-details-phonetic-value", phonetic.value)
-    );
-    view.append(row);
+  if (model.phoneticUs) {
+    view.append(createElement(documentRef, "p", "vocabulary-details-phonetic", model.phoneticUs));
   }
   if (model.meanings.length > 0) {
-    const section = createSection(documentRef, "中文释义", "vocabulary-details-meanings");
+    const section = createElement(documentRef, "section", "vocabulary-details-meanings");
     for (const meaning of model.meanings) {
       const item = createElement(documentRef, "div", "vocabulary-details-meaning");
       if (meaning.partOfSpeech) {
@@ -87,7 +78,7 @@ export function createVocabularyDetailsView({
       if (meaning.definitionZh) {
         item.append(createElement(
           documentRef,
-          "p",
+          "span",
           "vocabulary-details-definition",
           meaning.definitionZh
         ));
@@ -97,7 +88,7 @@ export function createVocabularyDetailsView({
     view.append(section);
   }
   if (model.collocations.length > 0) {
-    const section = createSection(documentRef, "常用搭配", "vocabulary-details-collocations");
+    const section = createSection(documentRef, "搭配", "vocabulary-details-collocations");
     const list = createElement(documentRef, "ul", "vocabulary-details-collocation-list");
     for (const collocation of model.collocations) {
       list.append(createElement(documentRef, "li", "vocabulary-details-collocation", collocation));
@@ -119,24 +110,12 @@ export function createVocabularyDetailsView({
     }
     view.append(section);
   }
-  if (model.notes) {
-    view.append(createTextSection(documentRef, "备注", model.notes, "vocabulary-details-notes"));
-  }
-  if (model.source) {
-    view.append(createTextSection(documentRef, "来源", model.source, "vocabulary-details-source"));
-  }
   return view;
 }
 
 function createSection(documentRef, title, className) {
   const section = createElement(documentRef, "section", `vocabulary-details-section ${className}`);
   section.append(createElement(documentRef, "h3", "vocabulary-details-heading", title));
-  return section;
-}
-
-function createTextSection(documentRef, title, value, className) {
-  const section = createSection(documentRef, title, className);
-  section.append(createElement(documentRef, "p", "vocabulary-details-text", value));
   return section;
 }
 
@@ -147,4 +126,8 @@ function createElement(documentRef, tagName, className, text = null) {
     element.textContent = text;
   }
   return element;
+}
+
+function formatCollocation(value) {
+  return String(value).trim().replace(/\s*(?:[—–]+|-{2,})\s*/, "\u00A0\u00A0");
 }
