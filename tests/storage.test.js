@@ -147,7 +147,7 @@ test("missing fields recover to safe defaults", () => {
   assert.equal("vocabulary" in loaded, false);
 });
 
-test("round preparation persists only with a valid preview question and no active round", () => {
+test("legacy round preparation is cleared while its free-practice question remains", () => {
   const storage = new MemoryStorage();
   const state = createPersistedState();
   state.rounds.current = null;
@@ -157,9 +157,10 @@ test("round preparation persists only with a valid preview question and no activ
   storage.setItem(STORAGE_KEY, JSON.stringify(state));
 
   const loaded = loadAppState({ storage, ...context });
-  assert.equal(loaded.practice.roundPreparation, true);
-  assert.equal(loaded.practice.roundPreparationSize, 20);
-  assert.equal(loaded.practice.roundPreparationCustom, true);
+  assert.equal(loaded.practice.roundPreparation, false);
+  assert.equal(loaded.practice.roundPreparationSize, null);
+  assert.equal(loaded.practice.roundPreparationCustom, false);
+  assert.equal(loaded.practice.activeQuestion.wordKey, state.practice.activeQuestion.wordKey);
 
   state.rounds.current = createPersistedState().rounds.current;
   storage.setItem(STORAGE_KEY, JSON.stringify(state));

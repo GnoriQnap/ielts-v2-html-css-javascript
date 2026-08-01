@@ -7,6 +7,8 @@ import { createDefaultRoundProgress } from "../js/core/round-service.js";
 import {
   applyWordbookStatusChange,
   createWordbookCategoryTree,
+  createWordbookCategoryTreeFromEntries,
+  createWordbookDataCache,
   createWordbookEntries,
   filterWordbookEntries,
   hasWordDetails
@@ -39,6 +41,45 @@ test("all mode builds a category tree and repeats multi-category words under eac
   assert.deepEqual(tree.map((group) => group.category), ["保持、维持", "支持、支撑", "调查、研究"]);
   assert.deepEqual(tree[0].words.map((entry) => entry.wordKey), ["sustain", "keep"]);
   assert.deepEqual(tree[1].words.map((entry) => entry.wordKey), ["sustain", "support"]);
+});
+
+test("category tree groups existing entries in one pass without filtering the full list per category", () => {
+  const index = createVocabularyIndex(vocabulary.vocabulary_list);
+  const entries = createWordbookEntries(index, { byWordKey: {} });
+  entries.filter = () => {
+    throw new Error("category tree must not repeatedly filter every entry");
+  };
+
+  const tree = createWordbookCategoryTreeFromEntries(index, entries);
+
+  assert.deepEqual(tree[0].words.map((entry) => entry.wordKey), ["sustain", "keep"]);
+  assert.deepEqual(tree[1].words.map((entry) => entry.wordKey), ["sustain", "support"]);
+});
+
+test("wordbook data cache reuses view models until index or learning identity changes", () => {
+  const index = createVocabularyIndex(vocabulary.vocabulary_list);
+  const learning = { byWordKey: {} };
+  const cache = createWordbookDataCache();
+  const first = cache.get(index, learning);
+  const repeated = cache.get(index, learning);
+
+  assert.equal(repeated, first);
+  assert.equal(first.entries.length, index.allWordKeys.length);
+  assert.equal(first.categoryTree.length, index.groupById.size);
+  assert.equal(first.entries.every((entry) => entry.details === undefined), true);
+
+  const changedLearning = {
+    byWordKey: { sustain: { status: "review" } }
+  };
+  const refreshed = cache.get(index, changedLearning);
+  assert.notEqual(refreshed, first);
+  assert.equal(
+    refreshed.entries.find((entry) => entry.wordKey === "sustain").status,
+    "review"
+  );
+
+  cache.clear();
+  assert.notEqual(cache.get(index, changedLearning), refreshed);
 });
 
 test("wordbook search matches English case-insensitively and any Chinese category", () => {

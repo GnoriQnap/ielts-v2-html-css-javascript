@@ -92,12 +92,6 @@ export function normalizeAppState(candidate, context) {
     correctGroupIdsByWordKey
   });
   const rounds = normalizeRounds(candidate.rounds, validWordKeys);
-  const roundPreparation = Boolean(
-    candidate.practice?.roundPreparation === true &&
-    activeQuestion &&
-    !rounds.current
-  );
-
   return {
     schemaVersion: SCHEMA_VERSION,
     savedAt: typeof candidate.savedAt === "string" ? candidate.savedAt : null,
@@ -107,13 +101,9 @@ export function normalizeAppState(candidate, context) {
         ? candidate.practice.mode
         : PRACTICE_MODES.RANDOM,
       activeQuestion,
-      roundPreparation,
-      roundPreparationSize: roundPreparation
-        ? normalizeRoundPreparationSize(candidate.practice?.roundPreparationSize)
-        : null,
-      roundPreparationCustom: Boolean(
-        roundPreparation && candidate.practice?.roundPreparationCustom === true
-      ),
+      roundPreparation: false,
+      roundPreparationSize: null,
+      roundPreparationCustom: false,
       freeAttemptCount: normalizeCount(candidate.practice?.freeAttemptCount),
       reviewQueue: normalizeReviewQueue(candidate.practice?.reviewQueue, {
         validWordKeys,
@@ -227,8 +217,4 @@ function normalizeGroupIds(candidate, validGroupIds) {
 
 function normalizeCount(value) {
   return Number.isInteger(value) && value >= 0 ? value : 0;
-}
-
-function normalizeRoundPreparationSize(value) {
-  return Number.isInteger(value) && value >= 5 ? value : null;
 }

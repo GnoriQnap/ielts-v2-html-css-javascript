@@ -1,4 +1,4 @@
-import { createVocabularyDetailsView } from "./vocabulary-details-view.js";
+import { createVocabularyDetailsView } from "./vocabulary-details-view.js?v=8.4c";
 
 export function createVocabularyCard({
   displayText,

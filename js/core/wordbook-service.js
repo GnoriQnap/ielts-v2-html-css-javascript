@@ -20,28 +20,67 @@ export const WORDBOOK_FILTERS = Object.freeze({
 export function createWordbookEntries(index, learning, detailsRepository = null) {
   return index.allWordKeys.map((wordKey) => {
     const groupIds = [...(index.groupIdsByWordKey.get(wordKey) ?? [])];
-    return {
+    const entry = {
       wordKey,
       displayText: index.displayByWordKey.get(wordKey),
       status: getLearningRecord(learning, wordKey).status,
       categories: groupIds.map((groupId) => ({
         groupId,
         category: index.groupById.get(groupId)?.category ?? ""
-      })),
-      details: readWordDetails(detailsRepository, wordKey)
+      }))
     };
+    if (detailsRepository && typeof detailsRepository.getWordDetails === "function") {
+      entry.details = readWordDetails(detailsRepository, wordKey);
+    }
+    return entry;
   });
 }
 
 export function createWordbookCategoryTree(index, learning, detailsRepository = null) {
   const entries = createWordbookEntries(index, learning, detailsRepository);
+  return createWordbookCategoryTreeFromEntries(index, entries);
+}
+
+export function createWordbookCategoryTreeFromEntries(index, entries) {
+  const wordsByGroupId = new Map(
+    [...index.groupById.keys()].map((groupId) => [groupId, []])
+  );
+
+  for (const entry of entries) {
+    for (const { groupId } of entry.categories) {
+      wordsByGroupId.get(groupId)?.push(entry);
+    }
+  }
+
   return [...index.groupById.entries()].map(([groupId, group]) => ({
     groupId,
     category: group.category,
-    words: entries.filter(
-      (entry) => index.groupIdsByWordKey.get(entry.wordKey)?.has(groupId)
-    )
+    words: wordsByGroupId.get(groupId) ?? []
   }));
+}
+
+export function createWordbookDataCache() {
+  let cached = null;
+  return {
+    get(index, learning) {
+      if (cached?.index === index && cached?.learning === learning) {
+        return cached;
+      }
+      const entries = createWordbookEntries(index, learning);
+      const categoryTree = createWordbookCategoryTreeFromEntries(index, entries);
+      cached = {
+        index,
+        learning,
+        entries,
+        categoryTree,
+        categoryTreeByGroupId: new Map(categoryTree.map((group) => [group.groupId, group]))
+      };
+      return cached;
+    },
+    clear() {
+      cached = null;
+    }
+  };
 }
 
 export function filterWordbookEntries(entries, options = {}) {

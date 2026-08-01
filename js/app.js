@@ -1,4 +1,5 @@
 import { vocabularyData } from "./data/vocabulary.js";
+import { defaultVocabularyData } from "./data/default-vocabulary.js";
 import { validateVocabularyData } from "./core/vocabulary-validator.js?v=8.1";
 import {
   createQuestion,
@@ -18,8 +19,8 @@ import {
   normalizeAppState,
   saveAppState,
   STORAGE_KEY
-} from "./core/storage.js?v=7.3b";
-import { createVocabularyRepository } from "./core/vocabulary-repository.js?v=8.1";
+} from "./core/storage.js?v=8.4c1";
+import { createVocabularyRepository } from "./core/vocabulary-repository.js?v=8.4c1";
 import { downloadVocabularyExport } from "./core/vocabulary-export-service.js?v=7.3a";
 import {
   assertVocabularyImportAllowed,
@@ -66,18 +67,17 @@ import {
 } from "./ui/home-dashboard.js?v=5.9";
 import {
   applyWordbookStatusChange,
-  createWordbookCategoryTree,
-  createWordbookEntries,
+  createWordbookDataCache,
   filterWordbookEntries,
   WORDBOOK_FILTERS
-} from "./core/wordbook-service.js?v=8.2";
-import { createVocabularyCard } from "./ui/vocabulary-card.js?v=8.3.2";
+} from "./core/wordbook-service.js?v=8.4c3";
+import { createVocabularyCard } from "./ui/vocabulary-card.js?v=8.4c";
 import {
   createVocabularyCardOverlayController
 } from "./ui/vocabulary-card-overlay.js?v=8.3.1";
 
 const vocabularyRepository = createVocabularyRepository({
-  fallbackVocabulary: vocabularyData,
+  fallbackVocabulary: defaultVocabularyData,
   legacyStateKey: STORAGE_KEY
 });
 const systemWordKeys = new Set(
@@ -86,9 +86,8 @@ const systemWordKeys = new Set(
     .map(normalizeWordKey)
     .filter(Boolean)
 );
-vocabularyRepository.load();
-let currentVocabulary = vocabularyRepository.getCurrentVocabulary();
-let report = validateVocabularyData(currentVocabulary);
+let currentVocabulary = vocabularyRepository.load();
+let report = vocabularyRepository.getCurrentValidation();
 const elements = {
   siteHeader: document.querySelector("#site-header"),
   practiceMain: document.querySelector("#practice-main"),
@@ -189,6 +188,7 @@ let isWordbookOpen = false;
 let wordbookFilter = WORDBOOK_FILTERS.ALL;
 let wordbookQuery = "";
 let wordbookNotice = "";
+const wordbookDataCache = createWordbookDataCache();
 const expandedWordbookGroupIds = new Set();
 let editingCategoryGroupId = null;
 let categoryManagerNotice = "";
@@ -493,7 +493,7 @@ function renderOptions(activeQuestion, isMultiple) {
   const selectedGroupIds = new Set(activeQuestion.selectedGroupIds);
   const correctGroupIds = new Set(activeQuestion.correctGroupIds);
   const isGraded = activeQuestion.phase !== "answering";
-  const isLocked = isGraded || appState.practice.roundPreparation;
+  const isLocked = isGraded;
 
   activeQuestion.optionGroupIds.forEach((groupId, index) => {
     const button = document.createElement("button");
@@ -529,16 +529,8 @@ function renderQuestionActions(activeQuestion) {
   elements.feedback.textContent = "";
   elements.feedback.className = "feedback";
   elements.viewQuestionDetails.hidden = (
-    appState.practice.roundPreparation ||
     activeQuestion.phase === "answering"
   );
-  if (appState.practice.roundPreparation) {
-    elements.submit.hidden = true;
-    elements.submit.disabled = true;
-    elements.decisions.hidden = true;
-    elements.next.hidden = true;
-    return;
-  }
   elements.submit.hidden = activeQuestion.phase !== "answering";
   elements.submit.disabled = activeQuestion.phase !== "answering";
   const isCorrectWaitingDecision = (
@@ -572,7 +564,7 @@ function renderQuestionActions(activeQuestion) {
 
 function toggleOption(groupId, isMultiple) {
   const activeQuestion = appState.practice.activeQuestion;
-  if (appState.practice.roundPreparation || activeQuestion.phase !== "answering") {
+  if (activeQuestion.phase !== "answering") {
     return;
   }
 
@@ -597,12 +589,13 @@ function toggleOption(groupId, isMultiple) {
     }
   };
   persistState();
-  renderActiveQuestion();
+  renderOptions(appState.practice.activeQuestion, isMultiple);
+  renderQuestionActions(appState.practice.activeQuestion);
 }
 
 function submitAnswer() {
   const activeQuestion = appState.practice.activeQuestion;
-  if (appState.practice.roundPreparation || activeQuestion.phase !== "answering") {
+  if (activeQuestion.phase !== "answering") {
     return;
   }
   if (activeQuestion.selectedGroupIds.length === 0) {
@@ -714,10 +707,7 @@ function chooseMasteryStatus(status) {
 }
 
 function changeMode(mode) {
-  if (
-    appState.practice.mode === mode ||
-    appState.practice.activeQuestion?.phase === "graded"
-  ) {
+  if (appState.practice.mode === mode) {
     return;
   }
 
@@ -757,9 +747,8 @@ function renderModeControls(activeQuestion) {
   const isRandom = appState.practice.mode === PRACTICE_MODES.RANDOM;
   elements.modeRandom.setAttribute("aria-pressed", String(isRandom));
   elements.modeIntensive.setAttribute("aria-pressed", String(!isRandom));
-  const controlsLocked = activeQuestion?.phase === "graded" || appState.practice.roundPreparation;
-  elements.modeRandom.disabled = controlsLocked;
-  elements.modeIntensive.disabled = controlsLocked;
+  elements.modeRandom.disabled = false;
+  elements.modeIntensive.disabled = false;
 }
 
 function renderEmptyState() {
@@ -795,42 +784,12 @@ function startNewRound() {
   const requestedSize = getSelectedRoundSize();
 
   try {
-    const preparedQuestion = appState.practice.roundPreparation
-      ? appState.practice.activeQuestion
-      : null;
     const round = createRound({
       eligibleWordKeys: getEligibleWordKeys(report.index),
       learning: appState.learning,
       requestedSize,
-      firstWordKey: preparedQuestion?.wordKey ?? null,
       createdAt: new Date().toISOString()
     });
-    if (preparedQuestion) {
-      const shown = markRoundWordShown({
-        round,
-        learning: appState.learning,
-        wordKey: preparedQuestion.wordKey
-      });
-      appState = {
-        ...appState,
-        learning: shown.learning,
-        practice: {
-          ...appState.practice,
-          mode: PRACTICE_MODES.RANDOM,
-          activeQuestion: preparedQuestion,
-          roundPreparation: false,
-          roundPreparationSize: null,
-          roundPreparationCustom: false
-        },
-        rounds: {
-          ...appState.rounds,
-          current: shown.round
-        }
-      };
-      persistState();
-      renderActiveQuestion();
-      return;
-    }
     appState = {
       ...appState,
       practice: {
@@ -880,49 +839,46 @@ function confirmAbandonCurrentRound() {
 
   dismissedCompletionRoundId = appState.rounds.lastCompletedSummary?.roundId ?? null;
   isAbandonConfirmationOpen = false;
-  enterNextRoundPreparation();
+  enterFreePracticeAfterRound();
 }
 
 function startNextRoundFromCompletion() {
   dismissedCompletionRoundId = appState.rounds.lastCompletedSummary?.roundId ?? null;
   openPracticeView();
-  enterNextRoundPreparation();
+  enterFreePracticeAfterRound();
 }
 
-function enterNextRoundPreparation() {
-  const previousWordKey = appState.practice.activeQuestion?.wordKey ?? null;
+function enterFreePracticeAfterRound() {
   const previousRoundSize = appState.rounds.current?.requestedSize ??
     appState.rounds.lastCompletedSummary?.totalWords ??
     getSelectedRoundSize();
-  const eligibleWordKeys = getEligibleWordKeys(report.index).filter(
-    (wordKey) => getLearningRecord(appState.learning, wordKey).status !== LEARNING_STATUSES.REMEMBERED
-  );
-  const wordKey = selectPracticeWordKey({
-    mode: PRACTICE_MODES.RANDOM,
-    eligibleWordKeys,
-    learning: appState.learning,
-    reviewQueue: appState.practice.reviewQueue,
-    attemptCount: appState.practice.freeAttemptCount,
-    excludeWordKey: previousWordKey
-  });
-  const question = wordKey ? createQuestion(report.index, { wordKey }) : null;
   appState = {
     ...appState,
     practice: {
       ...appState.practice,
       mode: PRACTICE_MODES.RANDOM,
-      activeQuestion: question ? createActiveQuestion(question) : null,
-      roundPreparation: Boolean(question),
-      roundPreparationSize: question ? previousRoundSize : null,
-      roundPreparationCustom: Boolean(
-        question && !PRESET_ROUND_SIZES.includes(previousRoundSize)
-      )
+      activeQuestion: null,
+      roundPreparation: false,
+      roundPreparationSize: null,
+      roundPreparationCustom: false
     },
     rounds: abandonRound(appState.rounds)
   };
-  persistState();
+  applyRoundSizeToControls(previousRoundSize);
+  replaceActiveQuestion();
   renderActiveQuestion();
-  elements.roundSize.focus();
+  elements.word.focus();
+}
+
+function applyRoundSizeToControls(size) {
+  if (PRESET_ROUND_SIZES.includes(size)) {
+    elements.roundSize.value = String(size);
+    return;
+  }
+  if (Number.isInteger(size) && size >= 5) {
+    elements.roundSize.value = "custom";
+    elements.customRoundSize.value = String(size);
+  }
 }
 
 function openCompletionIntensive() {
@@ -941,8 +897,6 @@ function renderRoundControls() {
     (wordKey) => getLearningRecord(appState.learning, wordKey).status !== LEARNING_STATUSES.REMEMBERED
   ).length;
   const isGraded = appState.practice.activeQuestion?.phase === "graded";
-
-  applyPreparedRoundSize();
 
   elements.roundSetup.hidden = Boolean(currentRound);
   elements.roundActive.hidden = !currentRound;
@@ -1004,17 +958,6 @@ function renderRoundControls() {
 }
 
 function handleRoundSizeChange() {
-  if (appState.practice.roundPreparation) {
-    appState = {
-      ...appState,
-      practice: {
-        ...appState.practice,
-        roundPreparationSize: getSelectedRoundSize(),
-        roundPreparationCustom: elements.roundSize.value === "custom"
-      }
-    };
-    persistState();
-  }
   renderRoundControls();
 }
 
@@ -1022,24 +965,6 @@ function getSelectedRoundSize() {
   return elements.roundSize.value === "custom"
     ? Number(elements.customRoundSize.value)
     : Number(elements.roundSize.value);
-}
-
-function applyPreparedRoundSize() {
-  const size = appState.practice.roundPreparationSize;
-  if (!appState.practice.roundPreparation) {
-    return;
-  }
-  if (appState.practice.roundPreparationCustom) {
-    elements.roundSize.value = "custom";
-    if (Number.isInteger(size) && size >= 5) {
-      elements.customRoundSize.value = String(size);
-    }
-  } else if (PRESET_ROUND_SIZES.includes(size)) {
-    elements.roundSize.value = String(size);
-  } else if (Number.isInteger(size) && size >= 5) {
-    elements.roundSize.value = "custom";
-    elements.customRoundSize.value = String(size);
-  }
 }
 
 function renderQuestionRoundStatus() {
@@ -1782,7 +1707,7 @@ function createTreeWordActionsB3(groupId, wordKey, isEditing) {
     actions.append(save, createTreeActionButtonB3("取消", "cancel-word", groupId, "button-quiet", wordKey));
   } else {
     actions.append(
-      createTreeActionButtonB3("详情", "view-details", groupId, "button-quiet", wordKey),
+      createTreeActionButtonB3("查看单词释义", "view-details", groupId, "button-quiet", wordKey),
       createTreeActionButtonB3("编辑", "edit-word", groupId, "button-quiet", wordKey),
       createTreeActionButtonB3("删除", "delete-word-relation", groupId, "button-danger", wordKey)
     );
@@ -2165,7 +2090,7 @@ function saveVocabularyCandidate(candidate, reportError = setCategoryManagerNoti
   try {
     vocabularyRepository.save(candidate);
     currentVocabulary = vocabularyRepository.getCurrentVocabulary();
-    report = validateVocabularyData(currentVocabulary);
+    report = vocabularyRepository.getCurrentValidation();
   } catch {
     reportError("词库保存失败，请检查浏览器存储权限。", "error");
     return false;
@@ -2266,15 +2191,10 @@ function handleWordbookFilter(event) {
 }
 
 function renderWordbook() {
-  const entries = createWordbookEntries(report.index, appState.learning, vocabularyRepository);
+  const { entries, categoryTree } = getWordbookData();
   const isCategoryTree = wordbookFilter === WORDBOOK_FILTERS.ALL && !wordbookQuery.trim();
   elements.clearWordbookSearch.hidden = !wordbookQuery;
   if (isCategoryTree) {
-    const categoryTree = createWordbookCategoryTree(
-      report.index,
-      appState.learning,
-      vocabularyRepository
-    );
     renderWordbookCategoryTree(categoryTree);
     elements.wordbookResultCount.textContent = `${categoryTree.length} 个分类`;
     elements.wordbookEmpty.hidden = categoryTree.length > 0;
@@ -2309,6 +2229,10 @@ function renderWordbook() {
   renderWordbookFilterState();
 }
 
+function getWordbookData() {
+  return wordbookDataCache.get(report.index, appState.learning);
+}
+
 function renderWordbookCategoryTree(categoryTree) {
   const fragment = document.createDocumentFragment();
   for (const group of categoryTree) {
@@ -2332,20 +2256,24 @@ function renderWordbookCategoryTree(categoryTree) {
     section.append(toggle);
 
     if (isExpanded) {
-      const words = document.createElement("div");
-      words.className = "wordbook-category-words";
-      for (const entry of group.words) {
-        words.append(createWordbookRow(entry, {
-          categories: [group.category],
-          nextStatus: null
-        }));
-      }
-      section.append(words);
+      section.append(createWordbookCategoryWords(group));
     }
     fragment.append(section);
   }
   elements.wordbookList.replaceChildren(fragment);
   elements.wordbookNotice.textContent = wordbookNotice;
+}
+
+function createWordbookCategoryWords(group) {
+  const words = document.createElement("div");
+  words.className = "wordbook-category-words";
+  for (const entry of group.words) {
+    words.append(createWordbookRow(entry, {
+      categories: [group.category],
+      nextStatus: null
+    }));
+  }
+  return words;
 }
 
 function createWordbookRow(entry, options = {}) {
@@ -2367,7 +2295,7 @@ function createWordbookRow(entry, options = {}) {
   detailButton.type = "button";
   detailButton.className = "word-detail-trigger";
   detailButton.dataset.detailWordKey = entry.wordKey;
-  detailButton.textContent = "查看详情";
+  detailButton.textContent = "查看单词释义";
   identity.append(word, detailButton);
 
   categories.className = "wordbook-categories";
@@ -2443,12 +2371,21 @@ function handleWordbookListClick(event) {
   const categoryToggle = event.target.closest("[data-category-group-id]");
   if (categoryToggle && elements.wordbookList.contains(categoryToggle)) {
     const groupId = Number(categoryToggle.dataset.categoryGroupId);
+    const section = categoryToggle.closest(".wordbook-category-node");
     if (expandedWordbookGroupIds.has(groupId)) {
       expandedWordbookGroupIds.delete(groupId);
+      section?.querySelector(":scope > .wordbook-category-words")?.remove();
     } else {
       expandedWordbookGroupIds.add(groupId);
+      const group = getWordbookData().categoryTreeByGroupId.get(groupId);
+      if (group && section) {
+        section.append(createWordbookCategoryWords(group));
+      }
     }
-    renderWordbook();
+    categoryToggle.setAttribute(
+      "aria-expanded",
+      String(expandedWordbookGroupIds.has(groupId))
+    );
     return;
   }
 
