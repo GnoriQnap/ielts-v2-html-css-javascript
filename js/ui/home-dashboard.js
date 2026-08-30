@@ -33,7 +33,7 @@ export function createHomeDashboardModel(options) {
   const totalCount = allWordKeys.length;
   const rememberedPercent = totalCount === 0
     ? 0
-    : Math.round((rememberedCount / totalCount) * 100);
+    : Number(((rememberedCount / totalCount) * 100).toFixed(4));
   const round = currentRound ? createRoundView(currentRound) : null;
 
   return {

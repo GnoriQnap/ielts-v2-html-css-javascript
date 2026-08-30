@@ -64,7 +64,7 @@ import {
 import {
   createHomeDashboardModel,
   shouldShowCompletionModal
-} from "./ui/home-dashboard.js?v=5.9";
+} from "./ui/home-dashboard.js?v=9.1a";
 import {
   applyWordbookStatusChange,
   createWordbookDataCache,
@@ -86,6 +86,7 @@ const systemWordKeys = new Set(
     .map(normalizeWordKey)
     .filter(Boolean)
 );
+const systemWordKeyList = [...systemWordKeys];
 let currentVocabulary = vocabularyRepository.load();
 let report = vocabularyRepository.getCurrentValidation();
 const elements = {
@@ -119,6 +120,7 @@ const elements = {
   modeIntensive: document.querySelector("#mode-intensive"),
   empty: document.querySelector("#empty-state"),
   roundSetup: document.querySelector("#round-setup"),
+  roundPanel: document.querySelector("#round-panel"),
   roundSize: document.querySelector("#round-size"),
   customRoundSize: document.querySelector("#custom-round-size"),
   startRound: document.querySelector("#start-round"),
@@ -236,7 +238,7 @@ elements.abandonRound.addEventListener("click", openAbandonConfirmation);
 elements.cancelAbandon.addEventListener("click", closeAbandonConfirmation);
 elements.confirmAbandon.addEventListener("click", confirmAbandonCurrentRound);
 elements.startNextRound.addEventListener("click", startNextRoundFromCompletion);
-elements.completionIntensive.addEventListener("click", openCompletionIntensive);
+elements.completionIntensive.addEventListener("click", returnFromCompletion);
 elements.homeLink.addEventListener("click", openPracticeFromLink);
 elements.practiceNav.addEventListener("click", openPracticeFromLink);
 elements.startRoundNav.addEventListener("click", () => openPracticeView());
@@ -472,15 +474,14 @@ function renderActiveQuestion() {
     return;
   }
   elements.empty.hidden = true;
+  elements.practiceMain.classList.remove("practice-empty-state");
   elements.options.hidden = false;
   const isMultiple = activeQuestion.correctGroupIds.length > 1;
   const record = getLearningRecord(appState.learning, activeQuestion.wordKey);
 
   elements.type.textContent = isMultiple ? "多选题" : "单选题";
   elements.word.textContent = report.index.displayByWordKey.get(activeQuestion.wordKey);
-  elements.prompt.textContent = isMultiple
-    ? "请选择所有对应的语义分类"
-    : "请选择对应的语义分类";
+  elements.prompt.textContent = isMultiple ? "多选题" : "请选择对应的语义分类";
   elements.prompt.classList.toggle("prompt-multiple", isMultiple);
   elements.wordStatus.textContent = `状态：${statusLabel(record.status)}`;
   elements.wordStatus.dataset.status = record.status;
@@ -761,6 +762,7 @@ function renderEmptyState() {
     ? "切换到随机练习继续本轮学习。"
     : "答错或主动加入待强化后，可在这里集中练习。";
   elements.prompt.classList.remove("prompt-multiple");
+  elements.practiceMain.classList.add("practice-empty-state");
   elements.wordStatus.textContent = "";
   elements.wordStatus.removeAttribute("data-status");
   elements.options.replaceChildren();
@@ -881,11 +883,24 @@ function applyRoundSizeToControls(size) {
   }
 }
 
-function openCompletionIntensive() {
+function returnFromCompletion() {
   dismissedCompletionRoundId = appState.rounds.lastCompletedSummary?.roundId ?? null;
   openPracticeView();
-  changeMode(PRACTICE_MODES.INTENSIVE);
-  renderRoundControls();
+  if (appState.practice.mode !== PRACTICE_MODES.RANDOM) {
+    appState = {
+      ...appState,
+      practice: {
+        ...appState.practice,
+        mode: PRACTICE_MODES.RANDOM
+      }
+    };
+  }
+  if (!isActiveQuestionAllowedInMode()) {
+    replaceActiveQuestion();
+  } else {
+    persistState();
+  }
+  renderActiveQuestion();
 }
 
 function renderRoundControls() {
@@ -900,6 +915,7 @@ function renderRoundControls() {
 
   elements.roundSetup.hidden = Boolean(currentRound);
   elements.roundActive.hidden = !currentRound;
+  elements.roundPanel.dataset.activeRound = String(Boolean(currentRound));
   elements.customRoundSize.min = "5";
   elements.customRoundSize.max = String(availableCount);
   elements.startRound.disabled = availableCount < 5 || isGraded;
@@ -998,7 +1014,7 @@ function getCurrentRoundCounts() {
 
 function renderDashboard() {
   const model = createHomeDashboardModel({
-    allWordKeys: report.index.allWordKeys,
+    allWordKeys: systemWordKeyList,
     learning: appState.learning,
     currentRound: appState.rounds.current,
     displayByWordKey: report.index.displayByWordKey
@@ -2192,8 +2208,10 @@ function handleWordbookFilter(event) {
 
 function renderWordbook() {
   const { entries, categoryTree } = getWordbookData();
-  const isCategoryTree = wordbookFilter === WORDBOOK_FILTERS.ALL && !wordbookQuery.trim();
-  elements.clearWordbookSearch.hidden = !wordbookQuery;
+  const hasSearchQuery = Boolean(wordbookQuery.trim());
+  const isCategoryTree = wordbookFilter === WORDBOOK_FILTERS.ALL && !hasSearchQuery;
+  elements.clearWordbookSearch.hidden = !hasSearchQuery;
+  elements.wordbookFilters.hidden = hasSearchQuery;
   if (isCategoryTree) {
     renderWordbookCategoryTree(categoryTree);
     elements.wordbookResultCount.textContent = `${categoryTree.length} 个分类`;
@@ -2204,13 +2222,15 @@ function renderWordbook() {
   }
 
   const visibleEntries = filterWordbookEntries(entries, {
-    filter: wordbookFilter,
+    filter: hasSearchQuery ? WORDBOOK_FILTERS.ALL : wordbookFilter,
     query: wordbookQuery
   });
   const fragment = document.createDocumentFragment();
 
   for (const entry of visibleEntries) {
-    const nextStatus = wordbookFilter === WORDBOOK_FILTERS.REVIEW
+    const nextStatus = hasSearchQuery
+      ? null
+      : wordbookFilter === WORDBOOK_FILTERS.REVIEW
       ? LEARNING_STATUSES.REMEMBERED
       : wordbookFilter === WORDBOOK_FILTERS.REMEMBERED
         ? LEARNING_STATUSES.REVIEW

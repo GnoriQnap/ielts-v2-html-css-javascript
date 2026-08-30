@@ -4,6 +4,10 @@ import {
   createHomeDashboardModel,
   shouldShowCompletionModal
 } from "../js/ui/home-dashboard.js";
+import {
+  applyMasteryDecision,
+  createDefaultLearningRecord
+} from "../js/core/learning-service.js";
 
 test("dashboard derives global counts, round progress, and review ranking", () => {
   const allWordKeys = ["alpha", "beta", "gamma", "delta"];
@@ -51,6 +55,20 @@ test("dashboard returns safe empty values without an active round", () => {
   assert.deepEqual(model.topReviewWords, []);
 });
 
+test("dashboard progress bar percentage changes from the first remembered word", () => {
+  const model = createHomeDashboardModel({
+    allWordKeys: Array.from({ length: 1119 }, (_, index) => `word-${index}`),
+    learning: {
+      byWordKey: {
+        "word-0": { status: "remembered" }
+      }
+    }
+  });
+
+  assert.equal(model.rememberedCount, 1);
+  assert.equal(model.rememberedPercent, 0.0894);
+});
+
 test("completion modal only opens for a newly completed round", () => {
   const summary = { roundId: "round-completed" };
 
@@ -69,4 +87,40 @@ test("completion modal only opens for a newly completed round", () => {
     currentRound: { id: "round-active" },
     dismissedRoundId: null
   }), false);
+});
+
+test("overall progress advances once for each newly remembered system word", () => {
+  const systemWordKeys = ["alpha", "beta", "gamma"];
+  let learning = { byWordKey: {} };
+  const remember = (wordKey) => {
+    const activeQuestion = {
+      wordKey,
+      phase: "graded",
+      result: { isCorrect: true, decision: null }
+    };
+    learning = applyMasteryDecision({
+      learning,
+      activeQuestion,
+      status: "remembered",
+      decidedAt: "2026-08-30T00:00:00.000Z"
+    }).learning;
+    return createHomeDashboardModel({ allWordKeys: systemWordKeys, learning });
+  };
+
+  assert.equal(remember("alpha").rememberedCount, 1);
+  assert.equal(remember("beta").rememberedCount, 2);
+  assert.equal(remember("gamma").rememberedCount, 3);
+  assert.equal(remember("alpha").rememberedCount, 3);
+
+  learning = {
+    ...learning,
+    byWordKey: {
+      ...learning.byWordKey,
+      custom: { ...createDefaultLearningRecord(), status: "remembered" }
+    }
+  };
+  const model = createHomeDashboardModel({ allWordKeys: systemWordKeys, learning });
+  assert.equal(model.rememberedCount, 3);
+  assert.equal(model.totalCount, 3);
+  assert.equal(model.rememberedPercent, 100);
 });
