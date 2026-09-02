@@ -75,6 +75,7 @@ import { createVocabularyCard } from "./ui/vocabulary-card.js?v=8.4c";
 import {
   createVocabularyCardOverlayController
 } from "./ui/vocabulary-card-overlay.js?v=8.3.1";
+import { getSupabaseConnectionStatus } from "./core/supabase-client.js?v=10.1";
 
 const vocabularyRepository = createVocabularyRepository({
   fallbackVocabulary: defaultVocabularyData,
@@ -292,6 +293,9 @@ if (report.isValid) {
 } else {
   showFatalError(report.errors.map((item) => item.message).join(" "));
 }
+
+// Supabase is optional during this stage. This probe never blocks application startup.
+void getSupabaseConnectionStatus();
 
 function showNextQuestion() {
   replaceActiveQuestion();
