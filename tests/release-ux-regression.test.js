@@ -36,27 +36,28 @@ test("single questions keep guidance while multiple questions render one friendl
 });
 
 test("the muted palette separates neutral, brand, success, danger, and warning tokens", () => {
-  assert.match(cssSource, /--color-bg: #f5f3ee;/);
+  assert.match(cssSource, /--color-bg: #f8f8f5;/);
   assert.match(cssSource, /--color-surface: #fdfcf8;/);
   assert.match(cssSource, /--color-text: #29332f;/);
-  assert.match(cssSource, /--color-primary: #4f7960;/);
-  assert.match(cssSource, /--color-primary-soft: #e1efdf;/);
-  assert.match(cssSource, /--color-success: #43805a;/);
-  assert.match(cssSource, /--color-danger: #a45a55;/);
+  assert.match(cssSource, /--color-primary: #258548;/);
+  assert.match(cssSource, /--color-primary-soft: #c3efcf;/);
+  assert.match(cssSource, /--color-success: #238552;/);
+  assert.match(cssSource, /--color-danger: #d72d4b;/);
+  assert.match(cssSource, /--color-danger-answer-soft: #fff0f3;/);
   assert.match(cssSource, /--color-warning: #96703a;/);
   assert.match(cssSource, /\.option-button\.selected\s*\{[\s\S]*var\(--color-primary\)/);
   assert.match(cssSource, /\.option-button\.correct\s*\{[\s\S]*var\(--color-success\)/);
-  assert.match(cssSource, /\.option-button\.incorrect\s*\{[\s\S]*var\(--color-danger\)/);
+  assert.match(cssSource, /\.option-button\.incorrect\s*\{[\s\S]*background: var\(--color-danger-answer-soft\);[\s\S]*var\(--color-danger\)/);
   assert.match(cssSource, /\.feedback\.validation \{ color: var\(--color-warning-text\); \}/);
   assert.doesNotMatch(cssSource, /linear-gradient/);
 });
 
 test("primary, danger, and reading text retain accessible contrast", () => {
-  assert.ok(contrastRatio("#fdfcf8", "#4f7960") >= 4.5);
-  assert.ok(contrastRatio("#fdfcf8", "#a45a55") >= 4.5);
+  assert.ok(contrastRatio("#fdfcf8", "#258548") >= 4.5);
+  assert.ok(contrastRatio("#fdfcf8", "#d72d4b") >= 4.5);
   assert.ok(contrastRatio("#29332f", "#fdfcf8") >= 4.5);
-  assert.ok(contrastRatio("#52625a", "#f5f3ee") >= 4.5);
-  assert.ok(contrastRatio("#355d47", "#e1efdf") >= 4.5);
+  assert.ok(contrastRatio("#52625a", "#f8f8f5") >= 4.5);
+  assert.ok(contrastRatio("#176b36", "#c3efcf") >= 4.5);
 });
 
 test("dashboard is rendered from the fixed official system word list", () => {
