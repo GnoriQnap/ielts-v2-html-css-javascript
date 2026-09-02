@@ -76,6 +76,11 @@ import {
   createVocabularyCardOverlayController
 } from "./ui/vocabulary-card-overlay.js?v=8.3.1";
 import { createAuthService } from "./core/auth-service.js?v=10.2a";
+import { createCloudLearningStateRepository } from "./core/cloud-learning-state-repository.js?v=10.4a";
+import {
+  CLOUD_SYNC_STATUSES,
+  createLearningStateRuntime
+} from "./core/learning-state-runtime.js?v=10.4b";
 import {
   cleanEmailConfirmationCallbackUrl,
   createPendingSignupEmailStore,
@@ -198,6 +203,7 @@ const elements = {
   accountSubmit: document.querySelector("#account-submit"),
   accountPanel: document.querySelector("#account-panel"),
   accountEmailDisplay: document.querySelector("#account-email-display"),
+  accountCloudStatus: document.querySelector("#account-cloud-status"),
   accountSignOut: document.querySelector("#account-sign-out"),
   accountConfirmationPending: document.querySelector("#account-confirmation-pending"),
   accountPendingEmail: document.querySelector("#account-pending-email"),
@@ -211,6 +217,7 @@ const elements = {
 };
 
 let appState = null;
+let learningStateRuntime = null;
 let persistenceError = "";
 let dismissedCompletionRoundId = null;
 let completionWasOpen = false;
@@ -346,6 +353,17 @@ if (report.isValid) {
     validGroupIds: new Set(report.index.groupById.keys()),
     correctGroupIdsByWordKey: report.index.groupIdsByWordKey
   });
+  const cloudLearningStateRepository = createCloudLearningStateRepository({
+    getNormalizationContext: createCurrentStateNormalizationContext
+  });
+  learningStateRuntime = createLearningStateRuntime({
+    guestState: appState,
+    cloudRepository: cloudLearningStateRepository,
+    saveGuestState: (state) => saveAppState(state),
+    normalizeRuntimeState: normalizeStateForCurrentVocabulary,
+    onRuntimeStateChange: applyRuntimeLearningState,
+    onStatusChange: renderCloudLearningStatus
+  });
   dismissedCompletionRoundId = appState.rounds.lastCompletedSummary?.roundId ?? null;
 
   if (!isActiveQuestionAllowedInMode()) {
@@ -359,8 +377,56 @@ if (report.isValid) {
   }
   renderActiveQuestion();
   renderViewFromLocation();
+  learningStateRuntime.connectAuthService(authService);
 } else {
   showFatalError(report.errors.map((item) => item.message).join(" "));
+}
+
+function createCurrentStateNormalizationContext() {
+  return {
+    validWordKeys: new Set(report.index.allWordKeys),
+    validGroupIds: new Set(report.index.groupById.keys()),
+    correctGroupIdsByWordKey: report.index.groupIdsByWordKey
+  };
+}
+
+function normalizeStateForCurrentVocabulary(candidate) {
+  return normalizeAppState(candidate, {
+    defaultState: createDefaultAppState(),
+    ...createCurrentStateNormalizationContext()
+  });
+}
+
+function applyRuntimeLearningState(nextState) {
+  appState = normalizeStateForCurrentVocabulary(nextState);
+  dismissedCompletionRoundId = appState.rounds.lastCompletedSummary?.roundId ?? null;
+  completionWasOpen = false;
+  if (
+    !isActiveQuestionAllowedInMode() ||
+    (
+      appState.practice.activeQuestion?.phase === "graded" &&
+      appState.practice.activeQuestion.result?.isCorrect === true &&
+      appState.practice.activeQuestion.result?.decision
+    )
+  ) {
+    replaceActiveQuestion();
+  }
+  renderActiveQuestion();
+  renderViewFromLocation();
+}
+
+function renderCloudLearningStatus(status) {
+  if (!elements.accountCloudStatus) return;
+  const messages = {
+    [CLOUD_SYNC_STATUSES.CONNECTED]: "学习进度已连接到账号。",
+    [CLOUD_SYNC_STATUSES.PENDING_MIGRATION]: "此账号尚未建立云端学习进度。当前设备上的学习进度将在下一步确认是否同步到账号。",
+    [CLOUD_SYNC_STATUSES.UNAVAILABLE]: "暂时无法连接云端学习进度。",
+    [CLOUD_SYNC_STATUSES.SAVE_ERROR]: "云端学习进度暂时保存失败，请稍后重试。",
+    [CLOUD_SYNC_STATUSES.LOADING]: "正在连接云端学习进度…",
+    [CLOUD_SYNC_STATUSES.GUEST]: "当前学习进度保存在此设备。"
+  };
+  elements.accountCloudStatus.textContent = messages[status.syncStatus] ?? messages.guest;
+  elements.accountCloudStatus.dataset.cloudStatus = status.syncStatus;
 }
 
 // Account restoration is optional and never blocks the local learning application.
@@ -454,7 +520,7 @@ function confirmVocabularyImport() {
       activeQuestion: appState.practice.activeQuestion,
       activeRound: appState.rounds.current,
       relatedState: nextState,
-      saveRelatedState: saveAppState
+      saveRelatedState: persistStateCandidate
     });
     currentVocabulary = result.vocabulary;
     report = result.validation;
@@ -2542,13 +2608,19 @@ function closeWordDetail() {
 
 function persistState() {
   try {
-    appState = saveAppState(appState);
+    appState = persistStateCandidate(appState);
     persistenceError = "";
     return true;
   } catch {
     persistenceError = "保存失败，请检查浏览器是否允许使用本地存储。";
     return false;
   }
+}
+
+function persistStateCandidate(candidate) {
+  return learningStateRuntime
+    ? learningStateRuntime.persistState(candidate)
+    : saveAppState(candidate);
 }
 
 function statusLabel(status) {

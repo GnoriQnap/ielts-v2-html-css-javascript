@@ -156,6 +156,18 @@ test("update changes only the authenticated row and never inserts a missing row"
   assert.equal(missing.calls.insert.length, 0);
 });
 
+test("an expected identity guard can only block and can never redirect a write", async () => {
+  const mock = createMockSupabase({ userId: "user-b" });
+  const result = await createRepository(mock.client).updateCloudLearningState(
+    createApplicationState(),
+    { expectedUserId: "user-a" }
+  );
+
+  assert.deepEqual(result, { ok: false, status: "identity-changed" });
+  assert.equal(mock.calls.from.length, 0);
+  assert.equal(mock.calls.update.length, 0);
+});
+
 test("auth and network failures remain structured and do not expose raw messages", async () => {
   const authFailure = createMockSupabase({
     userId: null,

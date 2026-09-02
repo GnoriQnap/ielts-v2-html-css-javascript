@@ -13,6 +13,7 @@ export const CLOUD_LEARNING_STATE_STATUSES = Object.freeze({
   CREATED: "created",
   UPDATED: "updated",
   ALREADY_EXISTS: "already-exists",
+  IDENTITY_CHANGED: "identity-changed",
   UNAUTHENTICATED: "unauthenticated",
   ERROR: "error"
 });
@@ -54,7 +55,8 @@ export function normalizeCloudLearningSnapshot(candidate, normalizationContext =
 export function createCloudLearningStateRepository(options = {}) {
   const {
     getClient = getSupabaseClient,
-    normalizationContext = {}
+    normalizationContext = {},
+    getNormalizationContext = () => normalizationContext
   } = options;
 
   async function loadCloudLearningState() {
@@ -75,7 +77,7 @@ export function createCloudLearningStateRepository(options = {}) {
       return {
         ok: true,
         status: CLOUD_LEARNING_STATE_STATUSES.FOUND,
-        state: normalizeCloudLearningSnapshot(data.state, normalizationContext),
+        state: normalizeCloudLearningSnapshot(data.state, getNormalizationContext()),
         updatedAt: typeof data.updated_at === "string" ? data.updated_at : null
       };
     } catch (error) {
@@ -83,12 +85,16 @@ export function createCloudLearningStateRepository(options = {}) {
     }
   }
 
-  async function createCloudLearningState(applicationState) {
+  async function createCloudLearningState(applicationState, guard = {}) {
     const auth = await getAuthenticatedContext(getClient, "create");
     if (!auth.ok) return auth.result;
+    if (hasIdentityChanged(auth.userId, guard.expectedUserId)) {
+      return { ok: false, status: CLOUD_LEARNING_STATE_STATUSES.IDENTITY_CHANGED };
+    }
+    const activeNormalizationContext = getNormalizationContext();
     const snapshot = normalizeCloudLearningSnapshot(
       createCloudLearningSnapshot(applicationState),
-      normalizationContext
+      activeNormalizationContext
     );
 
     try {
@@ -105,7 +111,7 @@ export function createCloudLearningStateRepository(options = {}) {
       return {
         ok: true,
         status: CLOUD_LEARNING_STATE_STATUSES.CREATED,
-        state: normalizeCloudLearningSnapshot(data?.state ?? snapshot, normalizationContext),
+        state: normalizeCloudLearningSnapshot(data?.state ?? snapshot, activeNormalizationContext),
         updatedAt: typeof data?.updated_at === "string" ? data.updated_at : null
       };
     } catch (error) {
@@ -113,12 +119,16 @@ export function createCloudLearningStateRepository(options = {}) {
     }
   }
 
-  async function updateCloudLearningState(applicationState) {
+  async function updateCloudLearningState(applicationState, guard = {}) {
     const auth = await getAuthenticatedContext(getClient, "update");
     if (!auth.ok) return auth.result;
+    if (hasIdentityChanged(auth.userId, guard.expectedUserId)) {
+      return { ok: false, status: CLOUD_LEARNING_STATE_STATUSES.IDENTITY_CHANGED };
+    }
+    const activeNormalizationContext = getNormalizationContext();
     const snapshot = normalizeCloudLearningSnapshot(
       createCloudLearningSnapshot(applicationState),
-      normalizationContext
+      activeNormalizationContext
     );
 
     try {
@@ -136,7 +146,7 @@ export function createCloudLearningStateRepository(options = {}) {
       return {
         ok: true,
         status: CLOUD_LEARNING_STATE_STATUSES.UPDATED,
-        state: normalizeCloudLearningSnapshot(data.state, normalizationContext),
+        state: normalizeCloudLearningSnapshot(data.state, activeNormalizationContext),
         updatedAt: typeof data.updated_at === "string" ? data.updated_at : null
       };
     } catch (error) {
@@ -210,6 +220,10 @@ function isMissingSession(error) {
 
 function isUniqueConflict(error) {
   return error?.code === "23505";
+}
+
+function hasIdentityChanged(actualUserId, expectedUserId) {
+  return typeof expectedUserId === "string" && expectedUserId !== actualUserId;
 }
 
 function isPlainObject(value) {
