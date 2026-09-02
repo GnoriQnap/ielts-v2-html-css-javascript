@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="IELTS 英语词汇语义分类练习">
     <title>IELTS 同义替换练习</title>
-    <link rel="stylesheet" href="./css/base.css?v=9.1f">
+    <link rel="stylesheet" href="./css/base.css?v=10.2a">
   </head>
   <body>
     <header id="site-header" class="topbar">
@@ -20,6 +20,7 @@
           <a class="nav-link nav-start-round" href="#round-panel">开始新一轮</a>
           <button id="wordbook-nav" class="nav-link" type="button">单词本</button>
           <button id="vocabulary-manager-nav" class="nav-link" type="button">词库管理</button>
+          <button id="account-nav" class="nav-link account-nav" type="button" data-auth-status="loading">登录</button>
         </nav>
 
         <div class="mode-switch" role="group" aria-label="练习模式">
@@ -320,6 +321,64 @@
       </section>
     </div>
 
-    <script type="module" src="./js/app.js?v=10.1"></script>
+    <div
+      id="account-overlay"
+      class="completion-modal account-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="account-dialog-title"
+      aria-hidden="true"
+      hidden
+    >
+      <section class="completion-card account-card">
+        <header class="account-dialog-header">
+          <h2 id="account-dialog-title">登录</h2>
+          <button id="account-dialog-close" class="button button-quiet account-dialog-close" type="button" aria-label="关闭账户窗口">关闭</button>
+        </header>
+
+        <form id="account-form" class="account-form" novalidate>
+          <label for="account-email">邮箱</label>
+          <input id="account-email" name="email" type="email" autocomplete="email" inputmode="email" required>
+
+          <label for="account-password">密码</label>
+          <input id="account-password" name="password" type="password" autocomplete="current-password" required>
+
+          <div id="account-confirm-row" class="account-confirm-row" hidden>
+            <label for="account-confirm-password">确认密码</label>
+            <input id="account-confirm-password" name="confirm-password" type="password" autocomplete="new-password">
+          </div>
+
+          <button id="account-submit" class="button button-primary button-full" type="submit">登录</button>
+          <p class="account-local-note">未登录也可以正常学习，当前进度会保存在此设备。</p>
+        </form>
+
+        <section id="account-panel" class="account-panel" hidden>
+          <p>当前登录：</p>
+          <strong id="account-email-display" class="account-email-display"></strong>
+          <p class="account-local-note">当前学习数据仍保存在此设备。</p>
+          <button id="account-sign-out" class="button button-secondary button-full" type="button">退出登录</button>
+        </section>
+
+        <section id="account-confirmation-pending" class="account-confirmation-state" hidden>
+          <p>确认邮件已发送至：</p>
+          <strong id="account-pending-email" class="account-email-display"></strong>
+          <p class="account-local-note">请前往邮箱点击确认链接完成注册。</p>
+          <button id="account-pending-return-login" class="button button-secondary button-full" type="button">返回登录</button>
+        </section>
+
+        <section id="account-confirmation-result" class="account-confirmation-state" hidden>
+          <p id="account-confirmation-message" class="account-confirmation-message"></p>
+          <div class="account-confirmation-actions">
+            <button id="account-confirmation-return-login" class="button button-secondary button-full" type="button">返回登录</button>
+            <button id="account-confirmation-return-signup" class="button button-quiet button-full" type="button">返回注册</button>
+          </div>
+        </section>
+
+        <p id="account-feedback" class="account-feedback" role="status" aria-live="polite"></p>
+        <button id="account-mode-toggle" class="account-mode-toggle" type="button">还没有账号？注册</button>
+      </section>
+    </div>
+
+    <script type="module" src="./js/app.js?v=10.2a"></script>
   </body>
 </html>

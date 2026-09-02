@@ -75,7 +75,13 @@ import { createVocabularyCard } from "./ui/vocabulary-card.js?v=8.4c";
 import {
   createVocabularyCardOverlayController
 } from "./ui/vocabulary-card-overlay.js?v=8.3.1";
-import { getSupabaseConnectionStatus } from "./core/supabase-client.js?v=10.1";
+import { createAuthService } from "./core/auth-service.js?v=10.2a";
+import {
+  cleanEmailConfirmationCallbackUrl,
+  createPendingSignupEmailStore,
+  inspectEmailConfirmationCallback
+} from "./core/auth-confirmation.js?v=10.2a";
+import { createAuthDialogController } from "./ui/auth-dialog.js?v=10.2a";
 
 const vocabularyRepository = createVocabularyRepository({
   fallbackVocabulary: defaultVocabularyData,
@@ -100,6 +106,7 @@ const elements = {
   startRoundNav: document.querySelector(".nav-start-round"),
   wordbookNav: document.querySelector("#wordbook-nav"),
   vocabularyManagerNav: document.querySelector("#vocabulary-manager-nav"),
+  accountNav: document.querySelector("#account-nav"),
   type: document.querySelector("#question-type"),
   word: document.querySelector("#word-heading"),
   prompt: document.querySelector("#question-prompt"),
@@ -179,7 +186,28 @@ const elements = {
   importVocabularyCategoryCount: document.querySelector("#import-vocabulary-category-count"),
   importVocabularyWordCount: document.querySelector("#import-vocabulary-word-count"),
   cancelVocabularyImport: document.querySelector("#cancel-vocabulary-import"),
-  confirmVocabularyImport: document.querySelector("#confirm-vocabulary-import")
+  confirmVocabularyImport: document.querySelector("#confirm-vocabulary-import"),
+  accountOverlay: document.querySelector("#account-overlay"),
+  accountDialogTitle: document.querySelector("#account-dialog-title"),
+  accountDialogClose: document.querySelector("#account-dialog-close"),
+  accountForm: document.querySelector("#account-form"),
+  accountEmail: document.querySelector("#account-email"),
+  accountPassword: document.querySelector("#account-password"),
+  accountConfirmRow: document.querySelector("#account-confirm-row"),
+  accountConfirmPassword: document.querySelector("#account-confirm-password"),
+  accountSubmit: document.querySelector("#account-submit"),
+  accountPanel: document.querySelector("#account-panel"),
+  accountEmailDisplay: document.querySelector("#account-email-display"),
+  accountSignOut: document.querySelector("#account-sign-out"),
+  accountConfirmationPending: document.querySelector("#account-confirmation-pending"),
+  accountPendingEmail: document.querySelector("#account-pending-email"),
+  accountPendingReturnLogin: document.querySelector("#account-pending-return-login"),
+  accountConfirmationResult: document.querySelector("#account-confirmation-result"),
+  accountConfirmationMessage: document.querySelector("#account-confirmation-message"),
+  accountConfirmationReturnLogin: document.querySelector("#account-confirmation-return-login"),
+  accountConfirmationReturnSignup: document.querySelector("#account-confirmation-return-signup"),
+  accountFeedback: document.querySelector("#account-feedback"),
+  accountModeToggle: document.querySelector("#account-mode-toggle")
 };
 
 let appState = null;
@@ -217,6 +245,47 @@ const vocabularyCardOverlayController = createVocabularyCardOverlayController({
     elements.vocabularyManagerMain
   ],
   documentRef: document
+});
+
+const authService = createAuthService();
+const pendingSignupEmailStore = createPendingSignupEmailStore();
+const emailConfirmationCallback = inspectEmailConfirmationCallback(window.location.href);
+const authDialogController = createAuthDialogController({
+  service: authService,
+  elements: {
+    trigger: elements.accountNav,
+    overlay: elements.accountOverlay,
+    title: elements.accountDialogTitle,
+    close: elements.accountDialogClose,
+    form: elements.accountForm,
+    email: elements.accountEmail,
+    password: elements.accountPassword,
+    confirmRow: elements.accountConfirmRow,
+    confirmPassword: elements.accountConfirmPassword,
+    submit: elements.accountSubmit,
+    modeToggle: elements.accountModeToggle,
+    accountPanel: elements.accountPanel,
+    accountEmail: elements.accountEmailDisplay,
+    signOut: elements.accountSignOut,
+    pendingPanel: elements.accountConfirmationPending,
+    pendingEmail: elements.accountPendingEmail,
+    pendingReturnLogin: elements.accountPendingReturnLogin,
+    confirmationPanel: elements.accountConfirmationResult,
+    confirmationMessage: elements.accountConfirmationMessage,
+    confirmationReturnLogin: elements.accountConfirmationReturnLogin,
+    confirmationReturnSignup: elements.accountConfirmationReturnSignup,
+    feedback: elements.accountFeedback
+  },
+  body: document.body,
+  backgroundElements: [
+    elements.siteHeader,
+    elements.practiceMain,
+    elements.wordbookMain,
+    elements.vocabularyManagerMain
+  ],
+  documentRef: document,
+  locationRef: window.location,
+  pendingEmailStore: pendingSignupEmailStore
 });
 
 elements.submit.addEventListener("click", submitAnswer);
@@ -294,8 +363,21 @@ if (report.isValid) {
   showFatalError(report.errors.map((item) => item.message).join(" "));
 }
 
-// Supabase is optional during this stage. This probe never blocks application startup.
-void getSupabaseConnectionStatus();
+// Account restoration is optional and never blocks the local learning application.
+void initializeAuthentication();
+
+async function initializeAuthentication() {
+  await authService.initialize();
+  if (!emailConfirmationCallback.isCallback) return;
+  try {
+    await authDialogController.handleEmailConfirmationCallback(emailConfirmationCallback);
+  } finally {
+    cleanEmailConfirmationCallbackUrl({
+      locationRef: window.location,
+      historyRef: window.history
+    });
+  }
+}
 
 function showNextQuestion() {
   replaceActiveQuestion();

@@ -88,7 +88,8 @@ test("an unavailable Supabase library cannot reject or block application startup
   });
 
   const appSource = await readFile(new URL("../js/app.js", import.meta.url), "utf8");
-  assert.match(appSource, /void getSupabaseConnectionStatus\(\);/);
+  assert.match(appSource, /void initializeAuthentication\(\);/);
+  assert.match(appSource, /await authService\.initialize\(\);/);
 });
 
 test("browser auth session persistence and automatic refresh stay enabled", async () => {

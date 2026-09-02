@@ -61,6 +61,7 @@ html { min-width: 0; scroll-behavior: smooth; }
 body { margin: 0; min-width: 0; overflow-x: hidden; background: var(--color-bg); }
 body.modal-open { overflow: hidden; }
 body.vocabulary-card-open { overflow: hidden; }
+body.account-dialog-open { overflow: hidden; }
 button, select, input { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
@@ -131,6 +132,7 @@ h1, h2, p { margin-top: 0; }
   color: var(--color-primary-text);
 }
 .nav-link:disabled { cursor: not-allowed; opacity: 0.42; }
+.account-nav { font-weight: 750; }
 .mode-switch {
   display: flex;
   gap: 6px;
@@ -298,6 +300,87 @@ h1, h2, p { margin-top: 0; }
 .completion-actions { display: flex; justify-content: center; gap: 10px; }
 .abandon-confirm-card { width: min(100%, 440px); }
 .abandon-confirm-card h2 { margin-top: 0; }
+
+.account-card {
+  width: min(100%, 430px);
+  padding: 24px;
+  text-align: left;
+}
+.account-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.account-dialog-header h2 { margin: 0; }
+.account-dialog-close { min-height: 40px; padding: 6px 12px; }
+.account-form { display: grid; gap: 9px; }
+.account-form label { color: var(--color-text-secondary); font-size: 14px; font-weight: 750; }
+.account-form input {
+  width: 100%;
+  min-height: 46px;
+  margin-bottom: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.account-form input:focus {
+  border-color: var(--color-primary-border);
+  outline: 3px solid var(--color-primary-focus);
+}
+.account-confirm-row { display: grid; gap: 9px; }
+.account-local-note {
+  margin: 4px 0 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+  text-align: center;
+}
+.account-feedback {
+  min-height: 21px;
+  margin: 14px 0 4px;
+  color: var(--color-danger-text);
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+}
+.account-mode-toggle {
+  display: block;
+  min-height: 40px;
+  margin: 0 auto;
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--color-primary-text);
+  cursor: pointer;
+  font-weight: 750;
+}
+.account-panel { text-align: center; }
+.account-panel > p:first-child { margin-bottom: 8px; color: var(--color-text-secondary); }
+.account-email-display {
+  display: block;
+  margin-bottom: 16px;
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+  font-size: 17px;
+}
+.account-panel .account-local-note { margin-bottom: 18px; }
+.account-confirmation-state { text-align: center; }
+.account-confirmation-state > p:first-child {
+  margin: 2px 0 8px;
+  color: var(--color-text-secondary);
+}
+.account-confirmation-state .account-email-display { margin-bottom: 12px; }
+.account-confirmation-state .account-local-note { margin-bottom: 20px; }
+.account-confirmation-message {
+  margin: 4px 0 20px;
+  color: var(--color-text-secondary);
+  line-height: 1.65;
+}
+.account-confirmation-actions { display: grid; gap: 9px; }
 
 @keyframes completion-arrive {
   from { opacity: 0; transform: translateY(-8px); }
@@ -1248,6 +1331,9 @@ h1, h2, p { margin-top: 0; }
   .completion-card h2 { font-size: 22px; }
   .completion-actions { display: grid; grid-template-columns: 1fr; }
   .completion-actions .button { width: 100%; }
+  .account-card { width: min(100%, 368px); padding: 20px 16px; }
+  .account-dialog-header { margin-bottom: 15px; }
+  .account-form input { font-size: 16px; }
   .wordbook-shell { padding: 10px 0 30px; }
   .wordbook-header { align-items: center; padding: 14px 16px; flex-direction: row; gap: 12px; }
   .wordbook-header > div { min-width: 0; flex: 1; }
