@@ -393,7 +393,8 @@ h1, h2, p { margin-top: 0; }
   font-size: 17px;
 }
 .account-panel .account-local-note { margin-bottom: 18px; }
-.account-panel #account-cloud-setup-open { margin-bottom: 10px; }
+.account-panel #account-cloud-setup-open,
+.account-panel #account-cloud-reload { margin-bottom: 10px; }
 .account-confirmation-state { text-align: center; }
 .account-confirmation-state > p:first-child {
   margin: 2px 0 8px;

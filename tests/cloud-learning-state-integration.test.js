@@ -14,12 +14,17 @@ test("application routes its single persistence boundary through the learning ru
 test("account panel exposes only the lightweight cloud connection status", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /id="account-cloud-status"/);
+  assert.match(html, /id="account-cloud-reload"[^>]*hidden/);
+  assert.match(html, /app\.js\?v=10\.6b2/);
   assert.match(html, /当前学习进度保存在此设备/);
 
   const app = await readFile(new URL("../js/app.js", import.meta.url), "utf8");
   assert.match(app, /学习进度已连接到账号/);
   assert.match(app, /此账号尚未建立云端学习进度/);
   assert.match(app, /暂时无法连接云端学习进度/);
+  assert.match(app, /此账号的学习进度已在另一台设备更新/);
+  assert.match(app, /reloadCloudLearningStateAfterConflict/);
+  assert.match(app, /accountCloudReload\.hidden\s*=\s*status\.syncStatus\s*!==\s*CLOUD_SYNC_STATUSES\.CONFLICT/);
 });
 
 test("cloud switching refreshes state consumers without rebuilding vocabulary", async () => {

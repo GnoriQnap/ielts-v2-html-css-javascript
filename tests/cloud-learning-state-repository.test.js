@@ -75,7 +75,7 @@ test("unauthenticated operations never access the learning-state table", async (
 
   assert.equal((await repository.loadCloudLearningState()).status, "unauthenticated");
   assert.equal((await repository.createCloudLearningState(createApplicationState())).status, "unauthenticated");
-  assert.equal((await repository.updateCloudLearningState(createApplicationState())).status, "unauthenticated");
+  assert.equal((await repository.updateCloudLearningState(createApplicationState(), { expectedRevision: 1 })).status, "unauthenticated");
   assert.equal(mock.calls.from.length, 0);
 });
 
@@ -102,7 +102,8 @@ test("load normalizes a found cloud row without changing current application sta
     userId: "user-a",
     loadRow: {
       state: { schemaVersion: 1, learning: { byWordKey: { missing: { status: "review" } } } },
-      updated_at: "2026-09-02T10:00:00.000Z"
+      updated_at: "2026-09-02T10:00:00.000Z",
+      revision: 3
     }
   });
 
@@ -110,6 +111,7 @@ test("load normalizes a found cloud row without changing current application sta
   assert.equal(result.status, CLOUD_LEARNING_STATE_STATUSES.FOUND);
   assert.deepEqual(result.state.learning, { byWordKey: {} });
   assert.equal(result.updatedAt, "2026-09-02T10:00:00.000Z");
+  assert.equal(result.revision, 3);
   assert.deepEqual(localState, before);
 });
 
@@ -122,6 +124,8 @@ test("create uses insert with the authenticated user id and never accepts a call
   assert.equal(result.status, CLOUD_LEARNING_STATE_STATUSES.CREATED);
   assert.equal(mock.calls.insert.length, 1);
   assert.equal(mock.calls.insert[0].user_id, "user-a");
+  assert.equal(mock.calls.insert[0].revision, 1);
+  assert.equal(result.revision, 1);
   assert.equal("user_id" in mock.calls.insert[0].state, false);
   assert.equal(mock.calls.upsert, 0);
 });
@@ -143,15 +147,17 @@ test("create returns already-exists on a unique conflict without an update or up
 test("update changes only the authenticated row and never inserts a missing row", async () => {
   const found = createMockSupabase({ userId: "user-a" });
   const result = await createRepository(found.client)
-    .updateCloudLearningState(createApplicationState());
+    .updateCloudLearningState(createApplicationState(), { expectedRevision: 1 });
   assert.equal(result.status, CLOUD_LEARNING_STATE_STATUSES.UPDATED);
-  assert.deepEqual(found.calls.eq, [["user_id", "user-a"]]);
+  assert.deepEqual(found.calls.eq, [["user_id", "user-a"], ["revision", 1]]);
+  assert.equal(found.calls.update[0].revision, 2);
+  assert.equal(result.revision, 2);
   assert.equal(found.calls.insert.length, 0);
   assert.equal(found.calls.upsert, 0);
 
   const missing = createMockSupabase({ userId: "user-a", updateRow: null });
   const missingResult = await createRepository(missing.client)
-    .updateCloudLearningState(createApplicationState());
+    .updateCloudLearningState(createApplicationState(), { expectedRevision: 1 });
   assert.deepEqual(missingResult, { ok: false, status: "not-found" });
   assert.equal(missing.calls.insert.length, 0);
 });
@@ -160,12 +166,88 @@ test("an expected identity guard can only block and can never redirect a write",
   const mock = createMockSupabase({ userId: "user-b" });
   const result = await createRepository(mock.client).updateCloudLearningState(
     createApplicationState(),
-    { expectedUserId: "user-a" }
+    { expectedUserId: "user-a", expectedRevision: 1 }
   );
 
   assert.deepEqual(result, { ok: false, status: "identity-changed" });
   assert.equal(mock.calls.from.length, 0);
   assert.equal(mock.calls.update.length, 0);
+});
+
+test("update rejects an invalid expected revision before accessing auth or the table", async () => {
+  const mock = createMockSupabase({ userId: "user-a" });
+  for (const expectedRevision of [undefined, 0, -1, 1.5, "1"]) {
+    const result = await createRepository(mock.client).updateCloudLearningState(
+      createApplicationState(),
+      { expectedUserId: "user-a", expectedRevision }
+    );
+    assert.equal(result.status, CLOUD_LEARNING_STATE_STATUSES.ERROR);
+    assert.equal(result.error.code, "invalid_revision");
+  }
+  assert.equal(mock.calls.from.length, 0);
+});
+
+test("a zero-row OCC update is classified as conflict by reloading the current revision", async () => {
+  const remoteState = createApplicationState();
+  remoteState.practice.freeAttemptCount = 9;
+  const mock = createMockSupabase({
+    userId: "user-a",
+    updateRow: null,
+    loadRow: {
+      state: remoteState,
+      updated_at: "2026-09-03T10:00:00.000Z",
+      revision: 2
+    }
+  });
+  const result = await createRepository(mock.client).updateCloudLearningState(
+    createApplicationState(),
+    { expectedUserId: "user-a", expectedRevision: 1 }
+  );
+
+  assert.equal(result.status, CLOUD_LEARNING_STATE_STATUSES.CONFLICT);
+  assert.equal(result.expectedRevision, 1);
+  assert.equal(result.revision, 2);
+  assert.equal(result.state.practice.freeAttemptCount, 9);
+  assert.equal(mock.calls.update.length, 1);
+  assert.equal(mock.calls.insert.length, 0);
+  assert.equal(mock.calls.upsert, 0);
+});
+
+test("Supabase data=[] is treated as zero updated rows and reaches conflict diagnosis", async () => {
+  const remoteState = createApplicationState();
+  remoteState.practice.freeAttemptCount = 50;
+  const mock = createMockSupabase({
+    userId: "user-a",
+    updateRow: [],
+    loadRow: {
+      state: remoteState,
+      updated_at: "2026-09-03T12:00:00.000Z",
+      revision: 50
+    }
+  });
+
+  const result = await createRepository(mock.client).updateCloudLearningState(
+    createApplicationState(),
+    { expectedUserId: "user-a", expectedRevision: 47 }
+  );
+
+  assert.equal(result.status, CLOUD_LEARNING_STATE_STATUSES.CONFLICT);
+  assert.equal(result.expectedRevision, 47);
+  assert.equal(result.revision, 50);
+  assert.equal(result.state.practice.freeAttemptCount, 50);
+  assert.equal(mock.calls.update.length, 1);
+  assert.equal(mock.calls.from.length, 2);
+  assert.equal(mock.calls.updateMaybeSingle, 0);
+});
+
+test("an invalid revision returned by load is rejected", async () => {
+  const mock = createMockSupabase({
+    userId: "user-a",
+    loadRow: { state: createApplicationState(), updated_at: null, revision: 0 }
+  });
+  const result = await createRepository(mock.client).loadCloudLearningState();
+  assert.equal(result.status, CLOUD_LEARNING_STATE_STATUSES.ERROR);
+  assert.equal(result.error.code, "invalid_revision");
 });
 
 test("auth and network failures remain structured and do not expose raw messages", async () => {
@@ -221,6 +303,7 @@ function createMockSupabase(options = {}) {
     insert: [],
     update: [],
     eq: [],
+    updateMaybeSingle: 0,
     upsert: 0
   };
 
@@ -267,16 +350,30 @@ function createMockSupabase(options = {}) {
       },
       async maybeSingle() {
         if (operation === "update") {
+          calls.updateMaybeSingle += 1;
           const row = updateRow === undefined
-            ? { state: payload.state, updated_at: "2026-09-02T11:00:00.000Z" }
+            ? { state: payload.state, updated_at: "2026-09-02T11:00:00.000Z", revision: payload.revision }
             : updateRow;
           return { data: row, error: updateError };
         }
         return { data: loadRow === undefined ? null : loadRow, error: loadError };
       },
+      then(onFulfilled, onRejected) {
+        if (operation !== "update") {
+          return Promise.reject(new Error("Only update queries are awaited as row arrays"))
+            .then(onFulfilled, onRejected);
+        }
+        const configured = updateRow === undefined
+          ? [{ state: payload.state, updated_at: "2026-09-02T11:00:00.000Z", revision: payload.revision }]
+          : updateRow;
+        const rows = configured === null
+          ? []
+          : Array.isArray(configured) ? configured : [configured];
+        return Promise.resolve({ data: rows, error: updateError }).then(onFulfilled, onRejected);
+      },
       async single() {
         const row = createRow === undefined
-          ? { state: payload.state, updated_at: "2026-09-02T10:30:00.000Z" }
+          ? { state: payload.state, updated_at: "2026-09-02T10:30:00.000Z", revision: payload.revision }
           : createRow;
         return { data: row, error: createError };
       }

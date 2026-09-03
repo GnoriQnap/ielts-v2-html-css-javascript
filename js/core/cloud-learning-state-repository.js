@@ -12,6 +12,7 @@ export const CLOUD_LEARNING_STATE_STATUSES = Object.freeze({
   NOT_FOUND: "not-found",
   CREATED: "created",
   UPDATED: "updated",
+  CONFLICT: "conflict",
   ALREADY_EXISTS: "already-exists",
   IDENTITY_CHANGED: "identity-changed",
   UNAUTHENTICATED: "unauthenticated",
@@ -64,22 +65,7 @@ export function createCloudLearningStateRepository(options = {}) {
     if (!auth.ok) return auth.result;
 
     try {
-      const { data, error } = await auth.client
-        .from(CLOUD_LEARNING_STATE_TABLE)
-        .select("state, updated_at")
-        .eq("user_id", auth.userId)
-        .maybeSingle();
-
-      if (error) return createOperationError("load", error);
-      if (!data) {
-        return { ok: true, status: CLOUD_LEARNING_STATE_STATUSES.NOT_FOUND };
-      }
-      return {
-        ok: true,
-        status: CLOUD_LEARNING_STATE_STATUSES.FOUND,
-        state: normalizeCloudLearningSnapshot(data.state, getNormalizationContext()),
-        updatedAt: typeof data.updated_at === "string" ? data.updated_at : null
-      };
+      return await loadAuthenticatedRow(auth, getNormalizationContext(), "load");
     } catch (error) {
       return createOperationError("load", error);
     }
@@ -100,19 +86,23 @@ export function createCloudLearningStateRepository(options = {}) {
     try {
       const { data, error } = await auth.client
         .from(CLOUD_LEARNING_STATE_TABLE)
-        .insert({ user_id: auth.userId, state: snapshot })
-        .select("state, updated_at")
+        .insert({ user_id: auth.userId, state: snapshot, revision: 1 })
+        .select("state, updated_at, revision")
         .single();
 
       if (isUniqueConflict(error)) {
         return { ok: false, status: CLOUD_LEARNING_STATE_STATUSES.ALREADY_EXISTS };
       }
       if (error) return createOperationError("create", error);
+      if (!isValidRevision(data?.revision)) {
+        return createInvalidRevisionError("create");
+      }
       return {
         ok: true,
         status: CLOUD_LEARNING_STATE_STATUSES.CREATED,
         state: normalizeCloudLearningSnapshot(data?.state ?? snapshot, activeNormalizationContext),
-        updatedAt: typeof data?.updated_at === "string" ? data.updated_at : null
+        updatedAt: typeof data?.updated_at === "string" ? data.updated_at : null,
+        revision: data.revision
       };
     } catch (error) {
       return createOperationError("create", error);
@@ -120,6 +110,9 @@ export function createCloudLearningStateRepository(options = {}) {
   }
 
   async function updateCloudLearningState(applicationState, guard = {}) {
+    if (!isValidRevision(guard.expectedRevision)) {
+      return createInvalidRevisionError("update");
+    }
     const auth = await getAuthenticatedContext(getClient, "update");
     if (!auth.ok) return auth.result;
     if (hasIdentityChanged(auth.userId, guard.expectedUserId)) {
@@ -134,20 +127,27 @@ export function createCloudLearningStateRepository(options = {}) {
     try {
       const { data, error } = await auth.client
         .from(CLOUD_LEARNING_STATE_TABLE)
-        .update({ state: snapshot })
+        .update({ state: snapshot, revision: guard.expectedRevision + 1 })
         .eq("user_id", auth.userId)
-        .select("state, updated_at")
-        .maybeSingle();
+        .eq("revision", guard.expectedRevision)
+        .select("state, updated_at, revision");
 
       if (error) return createOperationError("update", error);
-      if (!data) {
-        return { ok: false, status: CLOUD_LEARNING_STATE_STATUSES.NOT_FOUND };
+      const rows = normalizeReturnedRows(data);
+      if (rows.length === 0) {
+        return await classifyEmptyUpdate(auth, guard, getNormalizationContext);
+      }
+      if (rows.length !== 1) return createOperationError("update", { code: "unexpected_row_count" });
+      const row = rows[0];
+      if (!isValidRevision(row.revision) || row.revision !== guard.expectedRevision + 1) {
+        return createInvalidRevisionError("update");
       }
       return {
         ok: true,
         status: CLOUD_LEARNING_STATE_STATUSES.UPDATED,
-        state: normalizeCloudLearningSnapshot(data.state, activeNormalizationContext),
-        updatedAt: typeof data.updated_at === "string" ? data.updated_at : null
+        state: normalizeCloudLearningSnapshot(row.state, activeNormalizationContext),
+        updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
+        revision: row.revision
       };
     } catch (error) {
       return createOperationError("update", error);
@@ -159,6 +159,69 @@ export function createCloudLearningStateRepository(options = {}) {
     createCloudLearningState,
     updateCloudLearningState
   });
+}
+
+async function loadAuthenticatedRow(auth, normalizationContext, operation) {
+  const { data, error } = await auth.client
+    .from(CLOUD_LEARNING_STATE_TABLE)
+    .select("state, updated_at, revision")
+    .eq("user_id", auth.userId)
+    .maybeSingle();
+
+  if (error) return createOperationError(operation, error);
+  const rows = normalizeReturnedRows(data);
+  if (rows.length === 0) return { ok: true, status: CLOUD_LEARNING_STATE_STATUSES.NOT_FOUND };
+  if (rows.length !== 1) return createOperationError(operation, { code: "unexpected_row_count" });
+  const row = rows[0];
+  if (!isValidRevision(row.revision)) return createInvalidRevisionError(operation);
+  return {
+    ok: true,
+    status: CLOUD_LEARNING_STATE_STATUSES.FOUND,
+    state: normalizeCloudLearningSnapshot(row.state, normalizationContext),
+    updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
+    revision: row.revision
+  };
+}
+
+function normalizeReturnedRows(data) {
+  if (data === null || data === undefined) return [];
+  return Array.isArray(data) ? data : [data];
+}
+
+async function classifyEmptyUpdate(auth, guard, getNormalizationContext) {
+  const currentAuth = await getAuthenticatedContext(() => auth.client, "update-diagnostic");
+  if (!currentAuth.ok) return currentAuth.result;
+  if (
+    currentAuth.userId !== auth.userId ||
+    hasIdentityChanged(currentAuth.userId, guard.expectedUserId)
+  ) {
+    return { ok: false, status: CLOUD_LEARNING_STATE_STATUSES.IDENTITY_CHANGED };
+  }
+
+  try {
+    const current = await loadAuthenticatedRow(
+      currentAuth,
+      getNormalizationContext(),
+      "update-diagnostic"
+    );
+    if (!current.ok) return current;
+    if (current.status === CLOUD_LEARNING_STATE_STATUSES.NOT_FOUND) {
+      return { ok: false, status: CLOUD_LEARNING_STATE_STATUSES.NOT_FOUND };
+    }
+    if (current.revision !== guard.expectedRevision) {
+      return {
+        ok: false,
+        status: CLOUD_LEARNING_STATE_STATUSES.CONFLICT,
+        state: current.state,
+        updatedAt: current.updatedAt,
+        revision: current.revision,
+        expectedRevision: guard.expectedRevision
+      };
+    }
+    return createOperationError("update", { code: "no_matching_row" });
+  } catch (error) {
+    return createOperationError("update-diagnostic", error);
+  }
 }
 
 async function getAuthenticatedContext(getClient, operation) {
@@ -204,6 +267,14 @@ function createOperationError(operation, error = null) {
       code: safeErrorCode(error)
     }
   };
+}
+
+function createInvalidRevisionError(operation) {
+  return createOperationError(operation, { code: "invalid_revision" });
+}
+
+function isValidRevision(value) {
+  return Number.isSafeInteger(value) && value >= 1;
 }
 
 function safeErrorCode(error) {

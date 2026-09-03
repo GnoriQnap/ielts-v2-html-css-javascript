@@ -15,7 +15,7 @@ test("HTML, JavaScript, and CSS share one vocabulary card overlay contract", asy
   assert.equal((html.match(/id="vocabulary-card-overlay"/g) ?? []).length, 1);
   assert.equal((html.match(/id="vocabulary-card-host"/g) ?? []).length, 1);
   assert.match(html, /class="vocabulary-card-overlay"[\s\S]*hidden[\s\S]*aria-hidden="true"/);
-  assert.match(html, /base\.css\?v=10\.5b/);
+  assert.match(html, /base\.css\?v=10\.6b/);
   assert.match(app, /querySelector\("#vocabulary-card-overlay"\)/);
   assert.match(app, /querySelector\("#vocabulary-card-host"\)/);
   assert.match(css, /\.vocabulary-card-overlay\s*\{[\s\S]*position:\s*fixed;[\s\S]*inset:\s*0;/);

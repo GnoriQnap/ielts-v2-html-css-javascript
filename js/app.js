@@ -76,18 +76,18 @@ import {
   createVocabularyCardOverlayController
 } from "./ui/vocabulary-card-overlay.js?v=8.3.1";
 import { createAuthService } from "./core/auth-service.js?v=10.2a";
-import { createCloudLearningStateRepository } from "./core/cloud-learning-state-repository.js?v=10.4a";
+import { createCloudLearningStateRepository } from "./core/cloud-learning-state-repository.js?v=10.6b2";
 import {
   CLOUD_SYNC_STATUSES,
   createLearningStateRuntime
-} from "./core/learning-state-runtime.js?v=10.5a";
+} from "./core/learning-state-runtime.js?v=10.6b2";
 import {
   cleanEmailConfirmationCallbackUrl,
   createPendingSignupEmailStore,
   inspectEmailConfirmationCallback
 } from "./core/auth-confirmation.js?v=10.2a";
 import { createAuthDialogController } from "./ui/auth-dialog.js?v=10.2a";
-import { createCloudLearningSetupDialog } from "./ui/cloud-learning-setup-dialog.js?v=10.5a";
+import { createCloudLearningSetupDialog } from "./ui/cloud-learning-setup-dialog.js?v=10.6b2";
 
 const vocabularyRepository = createVocabularyRepository({
   fallbackVocabulary: defaultVocabularyData,
@@ -205,6 +205,7 @@ const elements = {
   accountPanel: document.querySelector("#account-panel"),
   accountEmailDisplay: document.querySelector("#account-email-display"),
   accountCloudStatus: document.querySelector("#account-cloud-status"),
+  accountCloudReload: document.querySelector("#account-cloud-reload"),
   accountCloudSetupOpen: document.querySelector("#account-cloud-setup-open"),
   accountSignOut: document.querySelector("#account-sign-out"),
   accountConfirmationPending: document.querySelector("#account-confirmation-pending"),
@@ -377,6 +378,9 @@ elements.wordbookFilters.addEventListener("click", handleWordbookFilter);
 elements.wordbookList.addEventListener("click", handleWordbookListClick);
 window.addEventListener("popstate", renderViewFromLocation);
 window.addEventListener("hashchange", renderViewFromLocation);
+elements.accountCloudReload.addEventListener("click", () => {
+  void learningStateRuntime?.reloadCloudLearningStateAfterConflict();
+});
 
 if (report.isValid) {
   appState = loadAppState({
@@ -460,11 +464,17 @@ function renderCloudLearningStatus(status) {
     [CLOUD_SYNC_STATUSES.CREATING]: "正在建立云端学习进度…",
     [CLOUD_SYNC_STATUSES.SETUP_ERROR]: "暂时无法建立云端学习进度，请稍后重试。",
     [CLOUD_SYNC_STATUSES.SAVE_ERROR]: "云端学习进度暂时保存失败，请稍后重试。",
+    [CLOUD_SYNC_STATUSES.CONFLICT]: "此账号的学习进度已在另一台设备更新。",
     [CLOUD_SYNC_STATUSES.LOADING]: "正在连接云端学习进度…",
     [CLOUD_SYNC_STATUSES.GUEST]: "当前学习进度保存在此设备。"
   };
   elements.accountCloudStatus.textContent = messages[status.syncStatus] ?? messages.guest;
   elements.accountCloudStatus.dataset.cloudStatus = status.syncStatus;
+  elements.accountCloudReload.hidden = status.syncStatus !== CLOUD_SYNC_STATUSES.CONFLICT;
+  elements.accountCloudReload.disabled = status.conflictReloading;
+  elements.accountCloudReload.textContent = status.conflictReloading
+    ? "正在重新载入…"
+    : "重新载入云端进度";
   cloudLearningSetupDialogController.update(status);
 }
 

@@ -124,7 +124,7 @@ test("already-exists reloads and uses remote state without overwriting it", asyn
   const fixture = createFixture({
     guestState: meaningfulGuest(),
     createResults: [{ ok: false, status: "already-exists" }],
-    loadResults: [{ ok: true, status: "not-found" }, { ok: true, status: "found", state: remote }]
+    loadResults: [{ ok: true, status: "not-found" }, { ok: true, status: "found", state: remote, revision: 1 }]
   });
   await fixture.login("a");
   const result = await fixture.runtime.saveGuestProgressToAccount();
@@ -159,7 +159,7 @@ test("identity change invalidates A setup before and after its delayed insert", 
   const pendingCreate = fixture.runtime.saveGuestProgressToAccount();
   await waitFor(() => fixture.cloud.calls.create.length === 1);
   await fixture.login("b");
-  finishCreate({ ok: true, status: "created", state: cloudState("late-a") });
+  finishCreate({ ok: true, status: "created", state: cloudState("late-a"), revision: 1 });
   assert.equal((await pendingCreate).status, "stale");
   assert.equal(fixture.runtime.getState().marker, "cloud-b");
 });
@@ -182,7 +182,7 @@ test("a delayed A setup does not block B from receiving an independent setup cho
   assert.equal(fixture.cloud.calls.create[1].guard.expectedUserId, "b");
   await pendingB;
 
-  finishCreate({ ok: true, status: "created", state: cloudState("late-a") });
+  finishCreate({ ok: true, status: "created", state: cloudState("late-a"), revision: 1 });
   assert.equal((await pendingA).status, "stale");
   assert.equal(fixture.runtime.getStatus().userId, "b");
   assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD);
@@ -200,7 +200,7 @@ test("logout invalidates an unfinished setup and double click creates once", asy
   assert.equal(first, second);
   await waitFor(() => fixture.cloud.calls.create.length === 1);
   await fixture.logout();
-  finishCreate({ ok: true, status: "created", state: cloudState("late") });
+  finishCreate({ ok: true, status: "created", state: cloudState("late"), revision: 1 });
   assert.equal((await first).status, "stale");
   assert.equal(fixture.cloud.calls.create.length, 1);
   assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.GUEST);
@@ -242,6 +242,7 @@ function createFixture({
 
 function createCloudMock({ rows, loadResults, createResults }) {
   const calls = { load: [], create: [], update: [] };
+  const revisions = Object.fromEntries(Object.keys(rows).map((userId) => [userId, 1]));
   const mock = {
     userId: null,
     calls,
@@ -250,18 +251,20 @@ function createCloudMock({ rows, loadResults, createResults }) {
         calls.load.push(mock.userId);
         if (loadResults.length) return await loadResults.shift();
         return rows[mock.userId]
-          ? { ok: true, status: "found", state: structuredClone(rows[mock.userId]) }
+          ? { ok: true, status: "found", state: structuredClone(rows[mock.userId]), revision: revisions[mock.userId] }
           : { ok: true, status: "not-found" };
       },
       async createCloudLearningState(state, guard) {
         calls.create.push({ state: structuredClone(state), guard: { ...guard } });
         if (createResults.length) return await createResults.shift();
         rows[mock.userId] = structuredClone(state);
-        return { ok: true, status: "created", state: structuredClone(state) };
+        revisions[mock.userId] = 1;
+        return { ok: true, status: "created", state: structuredClone(state), revision: 1 };
       },
       async updateCloudLearningState(state, guard) {
         calls.update.push({ state: structuredClone(state), guard: { ...guard } });
-        return { ok: true, status: "updated", state };
+        revisions[mock.userId] = guard.expectedRevision + 1;
+        return { ok: true, status: "updated", state, revision: revisions[mock.userId] };
       }
     }
   };

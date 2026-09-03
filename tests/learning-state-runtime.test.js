@@ -30,6 +30,7 @@ test("cloud found switches runtime without overwriting guest storage and logout 
 
   await becomeGuest(fixture);
   assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.GUEST);
+  assert.equal(fixture.runtime.getStatus().cloudRevision, null);
   assert.equal(fixture.runtime.getState().label, "guest");
   assert.deepEqual(fixture.savedGuestStates, []);
 });
@@ -74,6 +75,103 @@ test("authenticated cloud saves update only cloud and never guest storage", asyn
   assert.equal(fixture.cloud.calls.update.length, 1);
   assert.equal(fixture.cloud.calls.update[0].state.label, "cloud-a-change");
   assert.equal(fixture.cloud.calls.update[0].guard.expectedUserId, "a");
+  assert.equal(fixture.cloud.calls.update[0].guard.expectedRevision, 1);
+  assert.equal(fixture.runtime.getStatus().cloudRevision, 2);
+});
+
+test("sequential cloud saves read the latest revision when each queued task starts", async () => {
+  const fixture = createFixture({ rows: { a: learningState("cloud-a") } });
+  await authenticate(fixture, "a");
+  fixture.runtime.persistState(learningState("save-one"));
+  fixture.runtime.persistState(learningState("save-two"));
+  await fixture.runtime.flushCloudSaves();
+
+  assert.deepEqual(
+    fixture.cloud.calls.update.map(({ guard }) => guard.expectedRevision),
+    [1, 2]
+  );
+  assert.equal(fixture.runtime.getStatus().cloudRevision, 3);
+});
+
+test("revision conflict keeps local runtime, stops queued writes, and reloads only on request", async () => {
+  const remote = learningState("remote-rev-2");
+  const fixture = createFixture({
+    rows: { a: learningState("cloud-rev-1") },
+    updateResults: [{
+      ok: false,
+      status: "conflict",
+      state: remote,
+      revision: 2,
+      expectedRevision: 1
+    }]
+  });
+  await authenticate(fixture, "a");
+  fixture.runtime.persistState(learningState("local-first"));
+  fixture.runtime.persistState(learningState("local-second"));
+  await fixture.runtime.flushCloudSaves();
+
+  assert.equal(fixture.runtime.getStatus().syncStatus, CLOUD_SYNC_STATUSES.CONFLICT);
+  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD);
+  assert.equal(fixture.runtime.getStatus().remoteRevision, 2);
+  assert.equal(fixture.runtime.getState().label, "local-second");
+  assert.equal(fixture.cloud.calls.update.length, 1);
+  assert.equal(fixture.savedGuestStates.length, 0);
+  assert.equal(
+    fixture.statusChanges.some(({ syncStatus }) => syncStatus === CLOUD_SYNC_STATUSES.CONFLICT),
+    true
+  );
+
+  fixture.runtime.persistState(learningState("local-after-conflict"));
+  await fixture.runtime.flushCloudSaves();
+  assert.equal(fixture.cloud.calls.update.length, 1);
+  assert.equal(fixture.runtime.getState().label, "local-after-conflict");
+
+  fixture.cloud.setLoadOverride(Promise.resolve({
+    ok: true,
+    status: "found",
+    state: remote,
+    revision: 2
+  }));
+  await fixture.runtime.reloadCloudLearningStateAfterConflict();
+  assert.equal(fixture.runtime.getState().label, "remote-rev-2");
+  assert.equal(fixture.runtime.getStatus().cloudRevision, 2);
+  assert.equal(fixture.runtime.getStatus().syncStatus, CLOUD_SYNC_STATUSES.CONNECTED);
+  assert.equal(fixture.savedGuestStates.length, 0);
+});
+
+test("a failed conflict reload preserves the local runtime and conflict guard", async () => {
+  const fixture = createFixture({
+    rows: { a: learningState("cloud-rev-1") },
+    updateResults: [{ ok: false, status: "conflict", revision: 2 }]
+  });
+  await authenticate(fixture, "a");
+  fixture.runtime.persistState(learningState("unsaved-local"));
+  await fixture.runtime.flushCloudSaves();
+  fixture.cloud.setLoadOverride(Promise.resolve({ ok: false, status: "error" }));
+
+  const result = await fixture.runtime.reloadCloudLearningStateAfterConflict();
+  assert.equal(result.status, "error");
+  assert.equal(fixture.runtime.getState().label, "unsaved-local");
+  assert.equal(fixture.runtime.getStatus().syncStatus, CLOUD_SYNC_STATUSES.CONFLICT);
+  assert.equal(fixture.savedGuestStates.length, 0);
+});
+
+test("two devices loading revision one cannot overwrite one another", async () => {
+  const cloud = createSharedOccCloud(learningState("remembered-100"));
+  const deviceA = createRuntimeForSharedCloud(cloud);
+  const deviceB = createRuntimeForSharedCloud(cloud);
+  await deviceA.handleAuthState(authenticated("same-user"));
+  await deviceB.handleAuthState(authenticated("same-user"));
+
+  deviceA.persistState(learningState("remembered-105"));
+  await deviceA.flushCloudSaves();
+  deviceB.persistState(learningState("remembered-101"));
+  await deviceB.flushCloudSaves();
+
+  assert.equal(cloud.remote.state.label, "remembered-105");
+  assert.equal(cloud.remote.revision, 2);
+  assert.equal(deviceB.getStatus().syncStatus, CLOUD_SYNC_STATUSES.CONFLICT);
+  assert.equal(deviceB.getState().label, "remembered-101");
 });
 
 test("an update missing its row never inserts and returns to pending guest state", async () => {
@@ -139,7 +237,7 @@ test("stale A save cannot run as B and its completion cannot replace B state", a
   fixture.runtime.persistState(learningState("delayed-a"));
   await waitFor(() => fixture.cloud.calls.update.length === 1);
   await authenticate(fixture, "b");
-  finishSave({ ok: true, status: "updated" });
+  finishSave({ ok: true, status: "updated", revision: 2 });
   await fixture.runtime.flushCloudSaves();
 
   assert.equal(fixture.cloud.calls.update[0].guard.expectedUserId, "a");
@@ -160,7 +258,7 @@ test("switching identities restores guest before the next cloud load can finish"
   assert.equal(fixture.savedGuestStates.at(-1).label, "guest-during-switch");
   assert.equal(fixture.cloud.calls.update.length, 0);
 
-  finishLoad({ ok: true, status: "found", state: learningState("cloud-b") });
+  finishLoad({ ok: true, status: "found", state: learningState("cloud-b"), revision: 1 });
   await switching;
   assert.equal(fixture.runtime.getState().label, "cloud-b");
 });
@@ -176,7 +274,7 @@ test("logout while a save is pending cannot replace or persist over guest state"
   fixture.runtime.persistState(learningState("delayed-a"));
   await waitFor(() => fixture.cloud.calls.update.length === 1);
   await becomeGuest(fixture);
-  finishSave({ ok: true, status: "updated" });
+  finishSave({ ok: true, status: "updated", revision: 2 });
   await fixture.runtime.flushCloudSaves();
 
   assert.equal(fixture.runtime.getState().label, "guest");
@@ -210,6 +308,7 @@ function createFixture(options = {}) {
 function createCloudRepositoryMock({ rows = {}, loadError = false, updateResults = [] } = {}) {
   let currentUserId = null;
   let loadOverride = null;
+  const revisions = Object.fromEntries(Object.keys(rows).map((userId) => [userId, 1]));
   const calls = { load: [], update: [], create: 0 };
   return {
     calls,
@@ -226,17 +325,20 @@ function createCloudRepositoryMock({ rows = {}, loadError = false, updateResults
         if (loadError) return { ok: false, status: "error" };
         const state = rows[currentUserId];
         return state
-          ? { ok: true, status: "found", state }
+          ? { ok: true, status: "found", state, revision: revisions[currentUserId] }
           : { ok: true, status: "not-found" };
       },
       async updateCloudLearningState(state, guard) {
         calls.update.push({ state, guard });
         const result = updateResults.shift();
-        return result ? await result : { ok: true, status: "updated", state };
+        if (result) return await result;
+        revisions[currentUserId] = guard.expectedRevision + 1;
+        rows[currentUserId] = state;
+        return { ok: true, status: "updated", state, revision: revisions[currentUserId] };
       },
       async createCloudLearningState() {
         calls.create += 1;
-        return { ok: true, status: "created" };
+        return { ok: true, status: "created", revision: 1 };
       }
     }
   };
@@ -290,6 +392,54 @@ function createAuthEmitter(cloud) {
       await Promise.all([...listeners].map((listener) => listener(state)));
     }
   };
+}
+
+function createSharedOccCloud(initialState) {
+  const remote = { state: structuredClone(initialState), revision: 1 };
+  return {
+    remote,
+    repository: {
+      async loadCloudLearningState() {
+        return {
+          ok: true,
+          status: "found",
+          state: structuredClone(remote.state),
+          revision: remote.revision
+        };
+      },
+      async updateCloudLearningState(state, guard) {
+        if (guard.expectedRevision !== remote.revision) {
+          return {
+            ok: false,
+            status: "conflict",
+            state: structuredClone(remote.state),
+            revision: remote.revision,
+            expectedRevision: guard.expectedRevision
+          };
+        }
+        remote.state = structuredClone(state);
+        remote.revision += 1;
+        return {
+          ok: true,
+          status: "updated",
+          state: structuredClone(remote.state),
+          revision: remote.revision
+        };
+      },
+      async createCloudLearningState() {
+        throw new Error("create is outside this OCC scenario");
+      }
+    }
+  };
+}
+
+function createRuntimeForSharedCloud(cloud) {
+  return createLearningStateRuntime({
+    guestState: learningState("guest"),
+    cloudRepository: cloud.repository,
+    saveGuestState: (state) => state,
+    normalizeRuntimeState: (state) => structuredClone(state)
+  });
 }
 
 async function waitFor(predicate) {
