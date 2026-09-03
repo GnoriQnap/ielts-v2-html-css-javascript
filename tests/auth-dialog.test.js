@@ -18,6 +18,8 @@ test("account HTML provides a guest entry and safe email/password fields", async
   assert.match(html, /id="account-confirmation-pending"/);
   assert.match(html, /请前往邮箱点击确认链接完成注册/);
   assert.match(html, /id="account-confirmation-result"/);
+  assert.match(html, /id="account-dialog-close"[^>]*aria-label="关闭"[^>]*>×</);
+  assert.doesNotMatch(html, /id="account-dialog-close"[^>]*>关闭</);
   assert.equal((html.match(/id="account-overlay"/g) ?? []).length, 1);
 });
 

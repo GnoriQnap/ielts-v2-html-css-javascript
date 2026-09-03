@@ -80,13 +80,14 @@ import { createCloudLearningStateRepository } from "./core/cloud-learning-state-
 import {
   CLOUD_SYNC_STATUSES,
   createLearningStateRuntime
-} from "./core/learning-state-runtime.js?v=10.4b";
+} from "./core/learning-state-runtime.js?v=10.5a";
 import {
   cleanEmailConfirmationCallbackUrl,
   createPendingSignupEmailStore,
   inspectEmailConfirmationCallback
 } from "./core/auth-confirmation.js?v=10.2a";
 import { createAuthDialogController } from "./ui/auth-dialog.js?v=10.2a";
+import { createCloudLearningSetupDialog } from "./ui/cloud-learning-setup-dialog.js?v=10.5a";
 
 const vocabularyRepository = createVocabularyRepository({
   fallbackVocabulary: defaultVocabularyData,
@@ -204,6 +205,7 @@ const elements = {
   accountPanel: document.querySelector("#account-panel"),
   accountEmailDisplay: document.querySelector("#account-email-display"),
   accountCloudStatus: document.querySelector("#account-cloud-status"),
+  accountCloudSetupOpen: document.querySelector("#account-cloud-setup-open"),
   accountSignOut: document.querySelector("#account-sign-out"),
   accountConfirmationPending: document.querySelector("#account-confirmation-pending"),
   accountPendingEmail: document.querySelector("#account-pending-email"),
@@ -213,7 +215,12 @@ const elements = {
   accountConfirmationReturnLogin: document.querySelector("#account-confirmation-return-login"),
   accountConfirmationReturnSignup: document.querySelector("#account-confirmation-return-signup"),
   accountFeedback: document.querySelector("#account-feedback"),
-  accountModeToggle: document.querySelector("#account-mode-toggle")
+  accountModeToggle: document.querySelector("#account-mode-toggle"),
+  cloudLearningSetupOverlay: document.querySelector("#cloud-learning-setup-overlay"),
+  cloudLearningSetupClose: document.querySelector("#cloud-learning-setup-close"),
+  cloudLearningSaveGuest: document.querySelector("#cloud-learning-save-guest"),
+  cloudLearningStartFresh: document.querySelector("#cloud-learning-start-fresh"),
+  cloudLearningSetupFeedback: document.querySelector("#cloud-learning-setup-feedback")
 };
 
 let appState = null;
@@ -294,6 +301,30 @@ const authDialogController = createAuthDialogController({
   locationRef: window.location,
   pendingEmailStore: pendingSignupEmailStore
 });
+const cloudLearningSetupDialogController = createCloudLearningSetupDialog({
+  runtimeActions: {
+    getStatus: () => learningStateRuntime?.getStatus() ?? { source: "guest" },
+    saveGuestProgressToAccount: () => learningStateRuntime?.saveGuestProgressToAccount(),
+    startCloudLearningFromZero: () => learningStateRuntime?.startCloudLearningFromZero()
+  },
+  elements: {
+    open: elements.accountCloudSetupOpen,
+    overlay: elements.cloudLearningSetupOverlay,
+    close: elements.cloudLearningSetupClose,
+    saveGuest: elements.cloudLearningSaveGuest,
+    startFresh: elements.cloudLearningStartFresh,
+    feedback: elements.cloudLearningSetupFeedback
+  },
+  body: document.body,
+  backgroundElements: [
+    elements.siteHeader,
+    elements.practiceMain,
+    elements.wordbookMain,
+    elements.vocabularyManagerMain,
+    elements.accountOverlay
+  ],
+  documentRef: document
+});
 
 elements.submit.addEventListener("click", submitAnswer);
 elements.markReview.addEventListener("click", () => chooseMasteryStatus(LEARNING_STATUSES.REVIEW));
@@ -360,6 +391,7 @@ if (report.isValid) {
     guestState: appState,
     cloudRepository: cloudLearningStateRepository,
     saveGuestState: (state) => saveAppState(state),
+    createDefaultState: () => normalizeStateForCurrentVocabulary(createDefaultAppState()),
     normalizeRuntimeState: normalizeStateForCurrentVocabulary,
     onRuntimeStateChange: applyRuntimeLearningState,
     onStatusChange: renderCloudLearningStatus
@@ -418,15 +450,22 @@ function applyRuntimeLearningState(nextState) {
 function renderCloudLearningStatus(status) {
   if (!elements.accountCloudStatus) return;
   const messages = {
-    [CLOUD_SYNC_STATUSES.CONNECTED]: "学习进度已连接到账号。",
+    [CLOUD_SYNC_STATUSES.CONNECTED]: status.lastSetupAction === "save-guest"
+      ? "学习进度已保存到账号。"
+      : status.lastSetupAction === "start-fresh"
+        ? "已建立新的账号学习进度。"
+        : "学习进度已连接到账号。",
     [CLOUD_SYNC_STATUSES.PENDING_MIGRATION]: "此账号尚未建立云端学习进度。当前设备上的学习进度将在下一步确认是否同步到账号。",
     [CLOUD_SYNC_STATUSES.UNAVAILABLE]: "暂时无法连接云端学习进度。",
+    [CLOUD_SYNC_STATUSES.CREATING]: "正在建立云端学习进度…",
+    [CLOUD_SYNC_STATUSES.SETUP_ERROR]: "暂时无法建立云端学习进度，请稍后重试。",
     [CLOUD_SYNC_STATUSES.SAVE_ERROR]: "云端学习进度暂时保存失败，请稍后重试。",
     [CLOUD_SYNC_STATUSES.LOADING]: "正在连接云端学习进度…",
     [CLOUD_SYNC_STATUSES.GUEST]: "当前学习进度保存在此设备。"
   };
   elements.accountCloudStatus.textContent = messages[status.syncStatus] ?? messages.guest;
   elements.accountCloudStatus.dataset.cloudStatus = status.syncStatus;
+  cloudLearningSetupDialogController.update(status);
 }
 
 // Account restoration is optional and never blocks the local learning application.

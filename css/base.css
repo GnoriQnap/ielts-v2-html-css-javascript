@@ -61,7 +61,8 @@ html { min-width: 0; scroll-behavior: smooth; }
 body { margin: 0; min-width: 0; overflow-x: hidden; background: var(--color-bg); }
 body.modal-open { overflow: hidden; }
 body.vocabulary-card-open { overflow: hidden; }
-body.account-dialog-open { overflow: hidden; }
+body.account-dialog-open,
+body.cloud-learning-setup-open { overflow: hidden; }
 button, select, input { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }
@@ -307,14 +308,38 @@ h1, h2, p { margin-top: 0; }
   text-align: left;
 }
 .account-dialog-header {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  min-height: 40px;
+  padding-right: 44px;
   margin-bottom: 20px;
 }
-.account-dialog-header h2 { margin: 0; }
-.account-dialog-close { min-height: 40px; padding: 6px 12px; }
+.account-dialog-header h2 { margin: 0; white-space: nowrap; }
+.account-dialog-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  font-size: 25px;
+  font-weight: 500;
+  line-height: 1;
+}
+.account-dialog-close:hover { background: var(--color-surface-soft); color: var(--color-text); }
+.account-dialog-close:focus-visible {
+  outline: 3px solid var(--color-primary-focus);
+  outline-offset: 1px;
+}
 .account-form { display: grid; gap: 9px; }
 .account-form label { color: var(--color-text-secondary); font-size: 14px; font-weight: 750; }
 .account-form input {
@@ -368,6 +393,7 @@ h1, h2, p { margin-top: 0; }
   font-size: 17px;
 }
 .account-panel .account-local-note { margin-bottom: 18px; }
+.account-panel #account-cloud-setup-open { margin-bottom: 10px; }
 .account-confirmation-state { text-align: center; }
 .account-confirmation-state > p:first-child {
   margin: 2px 0 8px;
@@ -381,6 +407,19 @@ h1, h2, p { margin-top: 0; }
   line-height: 1.65;
 }
 .account-confirmation-actions { display: grid; gap: 9px; }
+.cloud-learning-setup-card { width: min(100%, 480px); }
+.cloud-learning-setup-copy {
+  margin: 0 0 18px;
+  color: var(--color-text-secondary);
+  line-height: 1.7;
+}
+.cloud-learning-setup-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.cloud-learning-setup-card .account-local-note { margin: 0; }
 
 @keyframes completion-arrive {
   from { opacity: 0; transform: translateY(-8px); }
@@ -1334,6 +1373,8 @@ h1, h2, p { margin-top: 0; }
   .account-card { width: min(100%, 368px); padding: 20px 16px; }
   .account-dialog-header { margin-bottom: 15px; }
   .account-form input { font-size: 16px; }
+  .cloud-learning-setup-card { width: min(100%, 368px); padding: 20px 16px; }
+  .cloud-learning-setup-actions { grid-template-columns: 1fr; }
   .wordbook-shell { padding: 10px 0 30px; }
   .wordbook-header { align-items: center; padding: 14px 16px; flex-direction: row; gap: 12px; }
   .wordbook-header > div { min-width: 0; flex: 1; }

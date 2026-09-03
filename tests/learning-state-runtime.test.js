@@ -50,7 +50,7 @@ test("switching between A and B never exposes the other account state", async ()
 });
 
 test("missing cloud row enters pending migration and keeps learning in guest storage", async () => {
-  const fixture = createFixture({ rows: {} });
+  const fixture = createFixture({ rows: {}, guestState: meaningfulState("guest") });
   await authenticate(fixture, "new-user");
 
   assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.PENDING_MIGRATION);
@@ -87,6 +87,7 @@ test("an update missing its row never inserts and returns to pending guest state
 
   assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.PENDING_MIGRATION);
   assert.equal(fixture.runtime.getState().label, "guest");
+  assert.equal(fixture.runtime.getStatus().meaningfulGuestProgress, false);
   assert.equal(fixture.cloud.calls.create, 0);
   assert.equal(fixture.cloud.calls.update.length, 1);
 });
@@ -107,7 +108,7 @@ test("session restore uses the same found and not-found boundaries", async () =>
   await authenticate(found, "a");
   assert.equal(found.runtime.getState().label, "restored-a");
 
-  const missing = createFixture({ rows: {} });
+  const missing = createFixture({ rows: {}, guestState: meaningfulState("guest") });
   await authenticate(missing, "a");
   assert.equal(missing.runtime.getState().label, "guest");
   assert.equal(missing.runtime.getStatus().source, LEARNING_STATE_SOURCES.PENDING_MIGRATION);
@@ -183,7 +184,7 @@ test("logout while a save is pending cannot replace or persist over guest state"
 });
 
 function createFixture(options = {}) {
-  const guestState = learningState("guest");
+  const guestState = options.guestState ?? learningState("guest");
   const savedGuestStates = [];
   const cloud = createCloudRepositoryMock(options);
   const runtimeChanges = [];
@@ -267,6 +268,12 @@ function learningState(label) {
     practice: { mode: "random", activeQuestion: null, freeAttemptCount: 0, reviewQueue: [] },
     rounds: { current: null, lastCompletedSummary: null }
   };
+}
+
+function meaningfulState(label) {
+  const state = learningState(label);
+  state.practice.freeAttemptCount = 1;
+  return state;
 }
 
 function createAuthEmitter(cloud) {

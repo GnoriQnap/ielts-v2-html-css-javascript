@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="IELTS 英语词汇语义分类练习">
     <title>IELTS 同义替换练习</title>
-    <link rel="stylesheet" href="./css/base.css?v=10.2a">
+    <link rel="stylesheet" href="./css/base.css?v=10.5b">
   </head>
   <body>
     <header id="site-header" class="topbar">
@@ -333,7 +333,7 @@
       <section class="completion-card account-card">
         <header class="account-dialog-header">
           <h2 id="account-dialog-title">登录</h2>
-          <button id="account-dialog-close" class="button button-quiet account-dialog-close" type="button" aria-label="关闭账户窗口">关闭</button>
+          <button id="account-dialog-close" class="account-dialog-close" type="button" aria-label="关闭">×</button>
         </header>
 
         <form id="account-form" class="account-form" novalidate>
@@ -356,6 +356,7 @@
           <p>当前登录：</p>
           <strong id="account-email-display" class="account-email-display"></strong>
           <p id="account-cloud-status" class="account-local-note" data-cloud-status="guest">当前学习进度保存在此设备。</p>
+          <button id="account-cloud-setup-open" class="button button-secondary button-full" type="button" hidden>设置账号学习进度</button>
           <button id="account-sign-out" class="button button-secondary button-full" type="button">退出登录</button>
         </section>
 
@@ -379,6 +380,30 @@
       </section>
     </div>
 
-    <script type="module" src="./js/app.js?v=10.4b"></script>
+    <div
+      id="cloud-learning-setup-overlay"
+      class="completion-modal cloud-learning-setup-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cloud-learning-setup-title"
+      aria-hidden="true"
+      hidden
+    >
+      <section class="completion-card cloud-learning-setup-card">
+        <header class="account-dialog-header">
+          <h2 id="cloud-learning-setup-title">设置账号学习进度</h2>
+          <button id="cloud-learning-setup-close" class="account-dialog-close" type="button" aria-label="关闭">×</button>
+        </header>
+        <p class="cloud-learning-setup-copy">此账号还没有云端学习进度。你可以将当前设备的学习进度保存到账号，或从零开始。</p>
+        <div class="cloud-learning-setup-actions">
+          <button id="cloud-learning-save-guest" class="button button-primary button-full" type="button">保存到账号</button>
+          <button id="cloud-learning-start-fresh" class="button button-secondary button-full" type="button">从零开始</button>
+        </div>
+        <p class="account-local-note">无论选择哪一种，当前设备的游客学习记录都会保留。</p>
+        <p id="cloud-learning-setup-feedback" class="account-feedback" role="status" aria-live="polite"></p>
+      </section>
+    </div>
+
+    <script type="module" src="./js/app.js?v=10.5a"></script>
   </body>
 </html>

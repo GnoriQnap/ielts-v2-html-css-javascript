@@ -1,5 +1,6 @@
 import { AUTH_STATUSES } from "./auth-service.js?v=10.2a";
 import { CLOUD_LEARNING_STATE_STATUSES } from "./cloud-learning-state-repository.js?v=10.4a";
+import { createDefaultAppState } from "./storage.js?v=8.4c1";
 
 export const LEARNING_STATE_SOURCES = Object.freeze({
   GUEST: "guest",
@@ -13,13 +14,38 @@ export const CLOUD_SYNC_STATUSES = Object.freeze({
   CONNECTED: "connected",
   PENDING_MIGRATION: "pending-migration",
   UNAVAILABLE: "unavailable",
+  CREATING: "creating",
+  SETUP_ERROR: "setup-error",
   SAVE_ERROR: "save-error"
 });
+
+export const CLOUD_SETUP_ACTIONS = Object.freeze({
+  SAVE_GUEST: "save-guest",
+  START_FRESH: "start-fresh"
+});
+
+export function hasMeaningfulLearningProgress(state) {
+  if (!state || typeof state !== "object") return false;
+  const records = state.learning?.byWordKey;
+  if (records && typeof records === "object" && !Array.isArray(records)) {
+    for (const record of Object.values(records)) {
+      if (isMeaningfulLearningRecord(record)) return true;
+    }
+  }
+
+  const practice = state.practice;
+  if (Number.isInteger(practice?.freeAttemptCount) && practice.freeAttemptCount > 0) return true;
+  if (Array.isArray(practice?.reviewQueue) && practice.reviewQueue.length > 0) return true;
+  if (isMeaningfulActiveQuestion(practice?.activeQuestion)) return true;
+  if (hasMeaningfulRoundProgress(state.rounds?.current)) return true;
+  return Boolean(state.rounds?.lastCompletedSummary);
+}
 
 export function createLearningStateRuntime({
   guestState,
   cloudRepository,
   saveGuestState,
+  createDefaultState = createDefaultAppState,
   normalizeRuntimeState = (state) => state,
   onRuntimeStateChange = () => {},
   onStatusChange = () => {}
@@ -27,6 +53,7 @@ export function createLearningStateRuntime({
   requireFunction(cloudRepository?.loadCloudLearningState, "Cloud load");
   requireFunction(cloudRepository?.updateCloudLearningState, "Cloud update");
   requireFunction(saveGuestState, "Guest save");
+  requireFunction(createDefaultState, "Default state factory");
   requireFunction(normalizeRuntimeState, "State normalization");
 
   let preservedGuestState = guestState;
@@ -39,6 +66,9 @@ export function createLearningStateRuntime({
   let loadingUserId = null;
   let loadingPromise = null;
   let cloudSaveChain = Promise.resolve();
+  let pendingMigration = null;
+  let migrationPromise = null;
+  let lastSetupAction = null;
   let unsubscribeAuth = null;
 
   function getState() {
@@ -50,7 +80,10 @@ export function createLearningStateRuntime({
       source,
       syncStatus,
       userId: currentUserId,
-      cloudRowConfirmed
+      cloudRowConfirmed,
+      meaningfulGuestProgress: pendingMigration?.meaningfulGuestProgress ?? false,
+      migrationInProgress: Boolean(migrationPromise),
+      lastSetupAction
     };
   }
 
@@ -92,6 +125,9 @@ export function createLearningStateRuntime({
 
     const wasShowingAccountState = source === LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD;
     const operationGeneration = ++generation;
+    pendingMigration = null;
+    migrationPromise = null;
+    lastSetupAction = null;
     loadingUserId = userId;
     currentUserId = userId;
     cloudRowConfirmed = false;
@@ -111,6 +147,8 @@ export function createLearningStateRuntime({
       loadingUserId = null;
       loadingPromise = null;
       if (result.ok && result.status === CLOUD_LEARNING_STATE_STATUSES.FOUND) {
+        pendingMigration = null;
+        migrationPromise = null;
         source = LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD;
         cloudRowConfirmed = true;
         currentState = normalizeRuntimeState(result.state);
@@ -123,12 +161,21 @@ export function createLearningStateRuntime({
         source = LEARNING_STATE_SOURCES.PENDING_MIGRATION;
         cloudRowConfirmed = false;
         currentState = preservedGuestState;
+        pendingMigration = {
+          userId,
+          generation: operationGeneration,
+          meaningfulGuestProgress: hasMeaningfulLearningProgress(preservedGuestState)
+        };
         setSyncStatus(CLOUD_SYNC_STATUSES.PENDING_MIGRATION);
         notifyRuntimeStateChange();
+        if (!pendingMigration.meaningfulGuestProgress) {
+          return establishCloudLearningState(CLOUD_SETUP_ACTIONS.START_FRESH);
+        }
         return getStatus();
       }
 
       source = LEARNING_STATE_SOURCES.GUEST;
+      pendingMigration = null;
       cloudRowConfirmed = false;
       currentState = preservedGuestState;
       setSyncStatus(CLOUD_SYNC_STATUSES.UNAVAILABLE);
@@ -139,6 +186,7 @@ export function createLearningStateRuntime({
         loadingUserId = null;
         loadingPromise = null;
         source = LEARNING_STATE_SOURCES.GUEST;
+        pendingMigration = null;
         cloudRowConfirmed = false;
         currentState = preservedGuestState;
         setSyncStatus(CLOUD_SYNC_STATUSES.UNAVAILABLE);
@@ -156,6 +204,9 @@ export function createLearningStateRuntime({
     loadingPromise = null;
     currentUserId = null;
     cloudRowConfirmed = false;
+    pendingMigration = null;
+    migrationPromise = null;
+    lastSetupAction = null;
     const shouldNotify = currentState !== preservedGuestState || source !== LEARNING_STATE_SOURCES.GUEST;
     source = LEARNING_STATE_SOURCES.GUEST;
     currentState = preservedGuestState;
@@ -198,6 +249,12 @@ export function createLearningStateRuntime({
           source = LEARNING_STATE_SOURCES.PENDING_MIGRATION;
           cloudRowConfirmed = false;
           currentState = preservedGuestState;
+          pendingMigration = {
+            userId: identity.userId,
+            generation: identity.generation,
+            meaningfulGuestProgress: hasMeaningfulLearningProgress(preservedGuestState)
+          };
+          migrationPromise = null;
           setSyncStatus(CLOUD_SYNC_STATUSES.PENDING_MIGRATION);
           notifyRuntimeStateChange();
           return result;
@@ -211,6 +268,95 @@ export function createLearningStateRuntime({
         }
         return { ok: false, status: CLOUD_LEARNING_STATE_STATUSES.ERROR };
       });
+  }
+
+  function saveGuestProgressToAccount() {
+    return establishCloudLearningState(CLOUD_SETUP_ACTIONS.SAVE_GUEST);
+  }
+
+  function startCloudLearningFromZero() {
+    return establishCloudLearningState(CLOUD_SETUP_ACTIONS.START_FRESH);
+  }
+
+  function establishCloudLearningState(action) {
+    if (migrationPromise) return migrationPromise;
+    if (!isCurrentPendingMigration()) {
+      return Promise.resolve({ ok: false, status: "stale" });
+    }
+
+    const identity = {
+      generation: pendingMigration.generation,
+      userId: pendingMigration.userId
+    };
+    const stateToCreate = action === CLOUD_SETUP_ACTIONS.SAVE_GUEST
+      ? preservedGuestState
+      : normalizeRuntimeState(createDefaultState());
+    lastSetupAction = null;
+    setSyncStatus(CLOUD_SYNC_STATUSES.CREATING);
+
+    migrationPromise = (async () => {
+      const result = await cloudRepository.createCloudLearningState(
+        stateToCreate,
+        { expectedUserId: identity.userId }
+      );
+      if (!isSamePendingIdentity(identity)) return { ok: false, status: "stale" };
+
+      if (result.ok && result.status === CLOUD_LEARNING_STATE_STATUSES.CREATED) {
+        activateCreatedCloudState(result.state, action);
+        return result;
+      }
+      if (result.status === CLOUD_LEARNING_STATE_STATUSES.ALREADY_EXISTS) {
+        return loadExistingStateAfterConflict(identity);
+      }
+
+      migrationPromise = null;
+      setSyncStatus(CLOUD_SYNC_STATUSES.SETUP_ERROR);
+      return result;
+    })().catch(() => {
+      if (isSamePendingIdentity(identity)) {
+        migrationPromise = null;
+        setSyncStatus(CLOUD_SYNC_STATUSES.SETUP_ERROR);
+      }
+      return { ok: false, status: CLOUD_LEARNING_STATE_STATUSES.ERROR };
+    });
+    return migrationPromise;
+  }
+
+  async function loadExistingStateAfterConflict(identity) {
+    const result = await cloudRepository.loadCloudLearningState();
+    if (!isSamePendingIdentity(identity)) return { ok: false, status: "stale" };
+    if (result.ok && result.status === CLOUD_LEARNING_STATE_STATUSES.FOUND) {
+      activateCreatedCloudState(result.state, "loaded-existing");
+      return result;
+    }
+    migrationPromise = null;
+    setSyncStatus(CLOUD_SYNC_STATUSES.SETUP_ERROR);
+    return result;
+  }
+
+  function activateCreatedCloudState(state, action) {
+    source = LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD;
+    cloudRowConfirmed = true;
+    currentState = normalizeRuntimeState(state);
+    pendingMigration = null;
+    migrationPromise = null;
+    lastSetupAction = action;
+    setSyncStatus(CLOUD_SYNC_STATUSES.CONNECTED);
+    notifyRuntimeStateChange();
+  }
+
+  function isCurrentPendingMigration() {
+    return source === LEARNING_STATE_SOURCES.PENDING_MIGRATION &&
+      !cloudRowConfirmed &&
+      pendingMigration !== null &&
+      currentUserId === pendingMigration.userId &&
+      generation === pendingMigration.generation;
+  }
+
+  function isSamePendingIdentity(identity) {
+    return isCurrentPendingMigration() &&
+      identity.userId === pendingMigration.userId &&
+      identity.generation === pendingMigration.generation;
   }
 
   function isCurrentCloudIdentity(identity) {
@@ -246,8 +392,46 @@ export function createLearningStateRuntime({
     getState,
     getStatus,
     handleAuthState,
-    persistState
+    persistState,
+    saveGuestProgressToAccount,
+    startCloudLearningFromZero
   });
+}
+
+function isMeaningfulLearningRecord(record) {
+  if (!record || typeof record !== "object") return false;
+  if (["review", "remembered"].includes(record.status)) return true;
+  if ([record.answerCount, record.correctCount, record.errorCount, record.roundsEntered]
+    .some((value) => Number.isInteger(value) && value > 0)) return true;
+  if (typeof record.lastAnsweredAt === "string" && record.lastAnsweredAt) return true;
+  if (typeof record.reviewSince === "string" && record.reviewSince) return true;
+  return Array.isArray(record.enteredRoundIds) && record.enteredRoundIds.length > 0;
+}
+
+function isMeaningfulActiveQuestion(question) {
+  if (!question || typeof question !== "object") return false;
+  if (question.phase === "graded" || question.result) return true;
+  return Array.isArray(question.selectedGroupIds) && question.selectedGroupIds.length > 0;
+}
+
+function hasMeaningfulRoundProgress(round) {
+  if (!round || typeof round !== "object") return false;
+  if ([round.attemptCount, round.correctAttemptCount]
+    .some((value) => Number.isInteger(value) && value > 0)) return true;
+  const progress = round.progressByWord;
+  if (!progress || typeof progress !== "object" || Array.isArray(progress)) return false;
+  return Object.values(progress).some((item) => item && typeof item === "object" && (
+    item.hasBeenShown === true ||
+    item.mastered === true ||
+    item.everWrong === true ||
+    item.everChoseReview === true ||
+    item.masteredViaExternalChange === true ||
+    (item.firstAttemptCorrect !== null && item.firstAttemptCorrect !== undefined) ||
+    (item.firstDecision !== null && item.firstDecision !== undefined) ||
+    (Number.isInteger(item.attemptCount) && item.attemptCount > 0) ||
+    (Number.isInteger(item.correctCount) && item.correctCount > 0) ||
+    (Number.isInteger(item.errorCount) && item.errorCount > 0)
+  ));
 }
 
 function requireFunction(value, label) {
