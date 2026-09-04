@@ -4,18 +4,27 @@ import test from "node:test";
 
 test("application routes its single persistence boundary through the learning runtime", async () => {
   const app = await readFile(new URL("../js/app.js", import.meta.url), "utf8");
-  assert.match(app, /function persistStateCandidate\(candidate\)[\s\S]*learningStateRuntime\.persistState\(candidate\)/);
+  assert.match(app, /function persistStateCandidate\(candidate, options\)[\s\S]*learningStateRuntime\.persistState\(candidate, options\)/);
   assert.match(app, /guestState:\s*appState/);
   assert.match(app, /saveGuestState:\s*\(state\)\s*=>\s*saveAppState\(state\)/);
   assert.match(app, /saveRelatedState:\s*persistStateCandidate/);
   assert.doesNotMatch(app, /createCloudLearningState\s*\(/);
 });
 
+test("only unsubmitted option selection uses cloud-deferred persistence", async () => {
+  const app = await readFile(new URL("../js/app.js", import.meta.url), "utf8");
+  const toggle = app.match(/function toggleOption\([\s\S]*?\n\}/)?.[0] ?? "";
+  const submit = app.match(/function submitAnswer\([\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(toggle, /persistState\(\{ intent: PERSISTENCE_INTENTS\.CLOUD_DEFERRED \}\)/);
+  assert.doesNotMatch(submit, /CLOUD_DEFERRED/);
+  assert.equal((app.match(/PERSISTENCE_INTENTS\.CLOUD_DEFERRED/g) ?? []).length, 1);
+});
+
 test("account panel exposes only the lightweight cloud connection status", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /id="account-cloud-status"/);
   assert.match(html, /id="account-cloud-reload"[^>]*hidden/);
-  assert.match(html, /app\.js\?v=10\.6b2/);
+  assert.match(html, /app\.js\?v=10\.7b/);
   assert.match(html, /当前学习进度保存在此设备/);
 
   const app = await readFile(new URL("../js/app.js", import.meta.url), "utf8");

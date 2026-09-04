@@ -79,15 +79,16 @@ import { createAuthService } from "./core/auth-service.js?v=10.2a";
 import { createCloudLearningStateRepository } from "./core/cloud-learning-state-repository.js?v=10.6b2";
 import {
   CLOUD_SYNC_STATUSES,
-  createLearningStateRuntime
-} from "./core/learning-state-runtime.js?v=10.6b2";
+  createLearningStateRuntime,
+  PERSISTENCE_INTENTS
+} from "./core/learning-state-runtime.js?v=10.7b";
 import {
   cleanEmailConfirmationCallbackUrl,
   createPendingSignupEmailStore,
   inspectEmailConfirmationCallback
 } from "./core/auth-confirmation.js?v=10.2a";
 import { createAuthDialogController } from "./ui/auth-dialog.js?v=10.2a";
-import { createCloudLearningSetupDialog } from "./ui/cloud-learning-setup-dialog.js?v=10.6b2";
+import { createCloudLearningSetupDialog } from "./ui/cloud-learning-setup-dialog.js?v=10.7b";
 
 const vocabularyRepository = createVocabularyRepository({
   fallbackVocabulary: defaultVocabularyData,
@@ -790,7 +791,7 @@ function toggleOption(groupId, isMultiple) {
       }
     }
   };
-  persistState();
+  persistState({ intent: PERSISTENCE_INTENTS.CLOUD_DEFERRED });
   renderOptions(appState.practice.activeQuestion, isMultiple);
   renderQuestionActions(appState.practice.activeQuestion);
 }
@@ -2655,9 +2656,9 @@ function closeWordDetail() {
   renderRoundControls();
 }
 
-function persistState() {
+function persistState(options) {
   try {
-    appState = persistStateCandidate(appState);
+    appState = persistStateCandidate(appState, options);
     persistenceError = "";
     return true;
   } catch {
@@ -2666,9 +2667,9 @@ function persistState() {
   }
 }
 
-function persistStateCandidate(candidate) {
+function persistStateCandidate(candidate, options) {
   return learningStateRuntime
-    ? learningStateRuntime.persistState(candidate)
+    ? learningStateRuntime.persistState(candidate, options)
     : saveAppState(candidate);
 }
 

@@ -56,7 +56,7 @@ test("Wordbook rendering does not load details, save vocabulary, validate, or re
 
 test("Vocabulary Card opens one word without rebuilding or saving Wordbook data", () => {
   const openSource = sourceBetween("function openVocabularyDetails(wordKey)", "function closeWordDetail()");
-  const closeSource = sourceBetween("function closeWordDetail()", "function persistState()");
+  const closeSource = sourceBetween("function closeWordDetail()", "function persistState(");
 
   assert.match(openSource, /vocabularyRepository\.getWordDetails\(wordKey\)/);
   assert.doesNotMatch(openSource, /renderWordbook|createVocabularyIndex|validateVocabulary|\.save\(/);

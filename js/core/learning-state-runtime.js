@@ -25,6 +25,11 @@ export const CLOUD_SETUP_ACTIONS = Object.freeze({
   START_FRESH: "start-fresh"
 });
 
+export const PERSISTENCE_INTENTS = Object.freeze({
+  IMMEDIATE: "immediate",
+  CLOUD_DEFERRED: "cloud-deferred"
+});
+
 export function hasMeaningfulLearningProgress(state) {
   if (!state || typeof state !== "object") return false;
   const records = state.learning?.byWordKey;
@@ -69,7 +74,9 @@ export function createLearningStateRuntime({
   let generation = 0;
   let loadingUserId = null;
   let loadingPromise = null;
-  let cloudSaveChain = Promise.resolve();
+  let cloudSaveInFlight = null;
+  let cloudPendingLatest = null;
+  let cloudRetryPaused = false;
   let pendingMigration = null;
   let migrationPromise = null;
   let lastSetupAction = null;
@@ -132,6 +139,7 @@ export function createLearningStateRuntime({
 
     const wasShowingAccountState = source === LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD;
     const operationGeneration = ++generation;
+    discardPendingCloudSave();
     pendingMigration = null;
     migrationPromise = null;
     lastSetupAction = null;
@@ -214,6 +222,7 @@ export function createLearningStateRuntime({
 
   function activateGuest(nextSyncStatus = CLOUD_SYNC_STATUSES.GUEST) {
     generation += 1;
+    discardPendingCloudSave();
     loadingUserId = null;
     loadingPromise = null;
     currentUserId = null;
@@ -232,7 +241,8 @@ export function createLearningStateRuntime({
     return getStatus();
   }
 
-  function persistState(nextState) {
+  function persistState(nextState, options = {}) {
+    const intent = normalizePersistenceIntent(options.intent);
     currentState = nextState;
     if (source !== LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD || !cloudRowConfirmed) {
       preservedGuestState = saveGuestState(nextState);
@@ -242,6 +252,10 @@ export function createLearningStateRuntime({
 
     if (syncStatus === CLOUD_SYNC_STATUSES.CONFLICT) return currentState;
 
+    // An unsubmitted selection may be lost on refresh in cloud mode. The next
+    // immediate snapshot (submit, decision, navigation, etc.) includes it.
+    if (intent === PERSISTENCE_INTENTS.CLOUD_DEFERRED) return currentState;
+
     enqueueCloudSave(nextState, {
       generation,
       userId: currentUserId
@@ -250,60 +264,103 @@ export function createLearningStateRuntime({
   }
 
   function enqueueCloudSave(stateToSave, identity) {
-    cloudSaveChain = cloudSaveChain
-      .catch(() => undefined)
-      .then(async () => {
-        if (!isCurrentCloudIdentity(identity)) return { status: "stale" };
-        if (syncStatus === CLOUD_SYNC_STATUSES.CONFLICT || !isValidRevision(cloudRevision)) {
-          return { status: "blocked" };
-        }
-        const expectedRevision = cloudRevision;
-        const result = await cloudRepository.updateCloudLearningState(
-          stateToSave,
-          { expectedUserId: identity.userId, expectedRevision }
-        );
-        if (!isCurrentCloudIdentity(identity)) return { status: "stale" };
+    cloudPendingLatest = { state: stateToSave, identity };
+    cloudRetryPaused = false;
+    drainCloudSaves();
+  }
 
-        if (result.ok && result.status === CLOUD_LEARNING_STATE_STATUSES.UPDATED) {
-          if (!isValidRevision(result.revision) || result.revision !== expectedRevision + 1) {
-            setSyncStatus(CLOUD_SYNC_STATUSES.SAVE_ERROR);
-            return { ok: false, status: CLOUD_LEARNING_STATE_STATUSES.ERROR };
-          }
-          cloudRevision = result.revision;
-          setSyncStatus(CLOUD_SYNC_STATUSES.CONNECTED);
-          return result;
-        }
-        if (result.status === CLOUD_LEARNING_STATE_STATUSES.CONFLICT) {
-          conflictRemote = isValidRevision(result.revision)
-            ? { state: result.state, updatedAt: result.updatedAt ?? null, revision: result.revision }
-            : null;
-          setSyncStatus(CLOUD_SYNC_STATUSES.CONFLICT);
-          return result;
-        }
-        if (result.status === CLOUD_LEARNING_STATE_STATUSES.NOT_FOUND) {
-          source = LEARNING_STATE_SOURCES.PENDING_MIGRATION;
-          cloudRowConfirmed = false;
-          cloudRevision = null;
-          currentState = preservedGuestState;
-          pendingMigration = {
-            userId: identity.userId,
-            generation: identity.generation,
-            meaningfulGuestProgress: hasMeaningfulLearningProgress(preservedGuestState)
-          };
-          migrationPromise = null;
-          setSyncStatus(CLOUD_SYNC_STATUSES.PENDING_MIGRATION);
-          notifyRuntimeStateChange();
-          return result;
-        }
-        setSyncStatus(CLOUD_SYNC_STATUSES.SAVE_ERROR);
-        return result;
-      })
-      .catch(() => {
-        if (isCurrentCloudIdentity(identity)) {
-          setSyncStatus(CLOUD_SYNC_STATUSES.SAVE_ERROR);
-        }
-        return { ok: false, status: CLOUD_LEARNING_STATE_STATUSES.ERROR };
+  function drainCloudSaves() {
+    if (cloudSaveInFlight || cloudRetryPaused || !cloudPendingLatest) return;
+
+    const request = cloudPendingLatest;
+    cloudPendingLatest = null;
+    if (!isCurrentCloudIdentity(request.identity)) {
+      drainCloudSaves();
+      return;
+    }
+    if (syncStatus === CLOUD_SYNC_STATUSES.CONFLICT || !isValidRevision(cloudRevision)) {
+      discardPendingCloudSave();
+      return;
+    }
+
+    cloudSaveInFlight = performCloudSave(request)
+      .catch(() => handleCloudSaveError(request))
+      .finally(() => {
+        cloudSaveInFlight = null;
+        drainCloudSaves();
       });
+  }
+
+  async function performCloudSave(request) {
+    const { state: stateToSave, identity } = request;
+    if (!isCurrentCloudIdentity(identity)) return { status: "stale" };
+
+    // Read at drain time so a coalesced pending snapshot uses the revision
+    // returned by the preceding in-flight update.
+    const expectedRevision = cloudRevision;
+    const result = await cloudRepository.updateCloudLearningState(
+      stateToSave,
+      { expectedUserId: identity.userId, expectedRevision }
+    );
+    if (!isCurrentCloudIdentity(identity)) return { status: "stale" };
+
+    if (result.ok && result.status === CLOUD_LEARNING_STATE_STATUSES.UPDATED) {
+      if (!isValidRevision(result.revision) || result.revision !== expectedRevision + 1) {
+        return handleCloudSaveError(request);
+      }
+      cloudRevision = result.revision;
+      setSyncStatus(CLOUD_SYNC_STATUSES.CONNECTED);
+      return result;
+    }
+    if (result.status === CLOUD_LEARNING_STATE_STATUSES.CONFLICT) {
+      conflictRemote = isValidRevision(result.revision)
+        ? { state: result.state, updatedAt: result.updatedAt ?? null, revision: result.revision }
+        : null;
+      discardPendingCloudSave();
+      setSyncStatus(CLOUD_SYNC_STATUSES.CONFLICT);
+      return result;
+    }
+    if (result.status === CLOUD_LEARNING_STATE_STATUSES.NOT_FOUND) {
+      discardPendingCloudSave();
+      source = LEARNING_STATE_SOURCES.PENDING_MIGRATION;
+      cloudRowConfirmed = false;
+      cloudRevision = null;
+      currentState = preservedGuestState;
+      pendingMigration = {
+        userId: identity.userId,
+        generation: identity.generation,
+        meaningfulGuestProgress: hasMeaningfulLearningProgress(preservedGuestState)
+      };
+      migrationPromise = null;
+      setSyncStatus(CLOUD_SYNC_STATUSES.PENDING_MIGRATION);
+      notifyRuntimeStateChange();
+      return result;
+    }
+    if (result.status === CLOUD_LEARNING_STATE_STATUSES.IDENTITY_CHANGED) {
+      discardPendingCloudSave();
+      setSyncStatus(CLOUD_SYNC_STATUSES.SAVE_ERROR);
+      return result;
+    }
+    return handleCloudSaveError(request, result);
+  }
+
+  function handleCloudSaveError(request, result = {
+    ok: false,
+    status: CLOUD_LEARNING_STATE_STATUSES.ERROR
+  }) {
+    if (isCurrentCloudIdentity(request.identity)) {
+      if (!cloudPendingLatest || !isSameIdentity(cloudPendingLatest.identity, request.identity)) {
+        cloudPendingLatest = request;
+      }
+      cloudRetryPaused = true;
+      setSyncStatus(CLOUD_SYNC_STATUSES.SAVE_ERROR);
+    }
+    return result;
+  }
+
+  function discardPendingCloudSave() {
+    cloudPendingLatest = null;
+    cloudRetryPaused = false;
   }
 
   function saveGuestProgressToAccount() {
@@ -461,11 +518,20 @@ export function createLearningStateRuntime({
   }
 
   async function flushCloudSaves() {
-    await cloudSaveChain;
+    while (cloudSaveInFlight) {
+      await cloudSaveInFlight;
+    }
+    if (cloudPendingLatest && !cloudRetryPaused) {
+      drainCloudSaves();
+      while (cloudSaveInFlight) {
+        await cloudSaveInFlight;
+      }
+    }
   }
 
   function destroy() {
     generation += 1;
+    discardPendingCloudSave();
     unsubscribeAuth?.();
     unsubscribeAuth = null;
   }
@@ -486,6 +552,16 @@ export function createLearningStateRuntime({
 
 function isValidRevision(value) {
   return Number.isSafeInteger(value) && value >= 1;
+}
+
+function normalizePersistenceIntent(intent) {
+  return intent === PERSISTENCE_INTENTS.CLOUD_DEFERRED
+    ? PERSISTENCE_INTENTS.CLOUD_DEFERRED
+    : PERSISTENCE_INTENTS.IMMEDIATE;
+}
+
+function isSameIdentity(left, right) {
+  return left?.generation === right?.generation && left?.userId === right?.userId;
 }
 
 function isMeaningfulLearningRecord(record) {
