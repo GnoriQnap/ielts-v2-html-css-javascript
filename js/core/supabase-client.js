@@ -55,6 +55,20 @@ export function validateSupabaseBrowserConfig({
   };
 }
 
+export function hasPersistedSupabaseSession({
+  url = SUPABASE_URL,
+  storage = globalThis.localStorage
+} = {}) {
+  if (!storage || typeof storage.getItem !== "function") return false;
+  try {
+    const projectRef = new URL(url).hostname.split(".")[0];
+    if (!projectRef) return false;
+    return storage.getItem(`sb-${projectRef}-auth-token`) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function createSupabaseClientProvider({
   url = SUPABASE_URL,
   publishableKey = SUPABASE_PUBLISHABLE_KEY,

@@ -12,7 +12,7 @@ import {
   LEARNING_STATUSES,
   removeLearningRecord,
   recordAnswer
-} from "./core/learning-service.js?v=7.2c3b";
+} from "./core/learning-service.js?v=10.7c";
 import {
   createDefaultAppState,
   loadAppState,
@@ -70,12 +70,13 @@ import {
   createWordbookDataCache,
   filterWordbookEntries,
   WORDBOOK_FILTERS
-} from "./core/wordbook-service.js?v=8.4c3";
+} from "./core/wordbook-service.js?v=10.7c";
 import { createVocabularyCard } from "./ui/vocabulary-card.js?v=8.4c";
 import {
   createVocabularyCardOverlayController
 } from "./ui/vocabulary-card-overlay.js?v=8.3.1";
 import { createAuthService } from "./core/auth-service.js?v=10.2a";
+import { hasPersistedSupabaseSession } from "./core/supabase-client.js?v=10.7c";
 import { createCloudLearningStateRepository } from "./core/cloud-learning-state-repository.js?v=10.6b2";
 import {
   CLOUD_SYNC_STATUSES,
@@ -89,6 +90,10 @@ import {
 } from "./core/auth-confirmation.js?v=10.2a";
 import { createAuthDialogController } from "./ui/auth-dialog.js?v=10.2a";
 import { createCloudLearningSetupDialog } from "./ui/cloud-learning-setup-dialog.js?v=10.7b";
+import {
+  createMainNavigationState,
+  MAIN_VIEWS
+} from "./ui/main-navigation-state.js?v=10.7c";
 
 const vocabularyRepository = createVocabularyRepository({
   fallbackVocabulary: defaultVocabularyData,
@@ -232,6 +237,8 @@ let dismissedCompletionRoundId = null;
 let completionWasOpen = false;
 let isAbandonConfirmationOpen = false;
 let isWordbookOpen = false;
+let currentMainView = MAIN_VIEWS.PRACTICE;
+let hasRenderedLearningState = false;
 let wordbookFilter = WORDBOOK_FILTERS.ALL;
 let wordbookQuery = "";
 let wordbookNotice = "";
@@ -266,6 +273,11 @@ const vocabularyCardOverlayController = createVocabularyCardOverlayController({
 const authService = createAuthService();
 const pendingSignupEmailStore = createPendingSignupEmailStore();
 const emailConfirmationCallback = inspectEmailConfirmationCallback(window.location.href);
+const shouldHoldInitialLearningState = hasPersistedSupabaseSession();
+if (shouldHoldInitialLearningState) {
+  elements.practiceMain.inert = true;
+  elements.practiceMain.setAttribute("aria-busy", "true");
+}
 const authDialogController = createAuthDialogController({
   service: authService,
   elements: {
@@ -403,17 +415,9 @@ if (report.isValid) {
   });
   dismissedCompletionRoundId = appState.rounds.lastCompletedSummary?.roundId ?? null;
 
-  if (!isActiveQuestionAllowedInMode()) {
-    replaceActiveQuestion();
-  } else if (
-    appState.practice.activeQuestion.phase === "graded" &&
-    appState.practice.activeQuestion.result?.isCorrect === true &&
-    appState.practice.activeQuestion.result?.decision
-  ) {
-    replaceActiveQuestion();
+  if (!shouldHoldInitialLearningState) {
+    renderInitialLearningState();
   }
-  renderActiveQuestion();
-  renderViewFromLocation();
   learningStateRuntime.connectAuthService(authService);
 } else {
   showFatalError(report.errors.map((item) => item.message).join(" "));
@@ -448,8 +452,31 @@ function applyRuntimeLearningState(nextState) {
   ) {
     replaceActiveQuestion();
   }
+  markLearningSurfaceReady();
+  hasRenderedLearningState = true;
   renderActiveQuestion();
   renderViewFromLocation();
+}
+
+function renderInitialLearningState() {
+  if (!isActiveQuestionAllowedInMode()) {
+    replaceActiveQuestion();
+  } else if (
+    appState.practice.activeQuestion.phase === "graded" &&
+    appState.practice.activeQuestion.result?.isCorrect === true &&
+    appState.practice.activeQuestion.result?.decision
+  ) {
+    replaceActiveQuestion();
+  }
+  markLearningSurfaceReady();
+  hasRenderedLearningState = true;
+  renderActiveQuestion();
+  renderViewFromLocation();
+}
+
+function markLearningSurfaceReady() {
+  elements.practiceMain.inert = false;
+  elements.practiceMain.removeAttribute("aria-busy");
 }
 
 function renderCloudLearningStatus(status) {
@@ -483,7 +510,11 @@ function renderCloudLearningStatus(status) {
 void initializeAuthentication();
 
 async function initializeAuthentication() {
-  await authService.initialize();
+  const authState = await authService.initialize();
+  await learningStateRuntime?.handleAuthState(authState);
+  if (!hasRenderedLearningState && learningStateRuntime) {
+    applyRuntimeLearningState(learningStateRuntime.getState());
+  }
   if (!emailConfirmationCallback.isCallback) return;
   try {
     await authDialogController.handleEmailConfirmationCallback(emailConfirmationCallback);
@@ -607,8 +638,8 @@ function getVocabularyImportErrorMessage(error) {
   }[error?.code] ?? "词库数据不合法";
 }
 
-function replaceActiveQuestion() {
-  const previousWordKey = appState.practice.activeQuestion?.wordKey ?? null;
+function replaceActiveQuestion(excludedWordKey = null) {
+  const previousWordKey = excludedWordKey ?? appState.practice.activeQuestion?.wordKey ?? null;
   const eligibleWordKeys = appState.rounds.current
     ? getRoundEligibleWordKeys(
       appState.rounds.current,
@@ -947,11 +978,31 @@ function isActiveQuestionAllowedInMode() {
 }
 
 function renderModeControls(activeQuestion) {
-  const isRandom = appState.practice.mode === PRACTICE_MODES.RANDOM;
-  elements.modeRandom.setAttribute("aria-pressed", String(isRandom));
-  elements.modeIntensive.setAttribute("aria-pressed", String(!isRandom));
+  renderMainNavigationState();
   elements.modeRandom.disabled = false;
   elements.modeIntensive.disabled = false;
+}
+
+function renderMainNavigationState() {
+  const navigation = createMainNavigationState(currentMainView, appState.practice.mode);
+
+  elements.modeRandom.setAttribute("aria-pressed", String(navigation.random));
+  elements.modeIntensive.setAttribute("aria-pressed", String(navigation.intensive));
+  elements.practiceNav.classList.remove("nav-link-current");
+  elements.wordbookNav.classList.toggle("nav-link-current", navigation.wordbook);
+  elements.vocabularyManagerNav.classList.toggle("nav-link-current", navigation.vocabularyManager);
+  setCurrentPage(elements.modeRandom, navigation.random);
+  setCurrentPage(elements.modeIntensive, navigation.intensive);
+  setCurrentPage(elements.wordbookNav, navigation.wordbook);
+  setCurrentPage(elements.vocabularyManagerNav, navigation.vocabularyManager);
+}
+
+function setCurrentPage(element, isCurrent) {
+  if (isCurrent) {
+    element.setAttribute("aria-current", "page");
+  } else {
+    element.removeAttribute("aria-current");
+  }
 }
 
 function renderEmptyState() {
@@ -1247,12 +1298,11 @@ function openPracticeFromLink(event) {
 
 function openPracticeView(updateRoute = true) {
   isWordbookOpen = false;
+  currentMainView = MAIN_VIEWS.PRACTICE;
   elements.practiceMain.hidden = false;
   elements.wordbookMain.hidden = true;
   elements.vocabularyManagerMain.hidden = true;
-  elements.practiceNav.classList.add("nav-link-current");
-  elements.wordbookNav.classList.remove("nav-link-current");
-  elements.vocabularyManagerNav.classList.remove("nav-link-current");
+  renderMainNavigationState();
   if (
     updateRoute &&
     ["#wordbook", "#vocabulary-manager"].includes(window.location.hash)
@@ -1263,12 +1313,11 @@ function openPracticeView(updateRoute = true) {
 
 function openWordbookView(updateRoute = true) {
   isWordbookOpen = true;
+  currentMainView = MAIN_VIEWS.WORDBOOK;
   elements.practiceMain.hidden = true;
   elements.wordbookMain.hidden = false;
   elements.vocabularyManagerMain.hidden = true;
-  elements.practiceNav.classList.remove("nav-link-current");
-  elements.wordbookNav.classList.add("nav-link-current");
-  elements.vocabularyManagerNav.classList.remove("nav-link-current");
+  renderMainNavigationState();
   if (updateRoute && window.location.hash !== "#wordbook") {
     updateViewRoute("#wordbook");
   }
@@ -1277,12 +1326,11 @@ function openWordbookView(updateRoute = true) {
 
 function openVocabularyManagerView(updateRoute = true) {
   isWordbookOpen = false;
+  currentMainView = MAIN_VIEWS.VOCABULARY_MANAGER;
   elements.practiceMain.hidden = true;
   elements.wordbookMain.hidden = true;
   elements.vocabularyManagerMain.hidden = false;
-  elements.practiceNav.classList.remove("nav-link-current");
-  elements.wordbookNav.classList.remove("nav-link-current");
-  elements.vocabularyManagerNav.classList.add("nav-link-current");
+  renderMainNavigationState();
   if (updateRoute && window.location.hash !== "#vocabulary-manager") {
     updateViewRoute("#vocabulary-manager");
   }
@@ -2545,12 +2593,6 @@ function createWordbookRow(entry, options = {}) {
       ? "加入已记忆"
       : "加入待强化";
     statusCell.append(action);
-    if (entry.wordKey === appState.practice.activeQuestion?.wordKey) {
-      const currentNote = document.createElement("span");
-      currentNote.className = "wordbook-current-note";
-      currentNote.textContent = "当前题完成前不可修改";
-      statusCell.append(currentNote);
-    }
   }
 
   row.append(identity, categories, statusCell);
@@ -2573,15 +2615,17 @@ function handleWordbookStatusChange(wordKey, status) {
     changedAt: new Date().toISOString()
   });
   if (!result.applied) {
-    wordbookNotice = result.reason === "active-question"
-      ? "请先完成当前题。"
-      : "学习状态没有变化。";
+    wordbookNotice = "学习状态没有变化。";
     renderWordbook();
     return;
   }
 
   appState = result.state;
-  persistState();
+  if (result.activeQuestionInvalidated) {
+    replaceActiveQuestion(wordKey);
+  } else {
+    persistState();
+  }
   wordbookNotice = persistenceError;
   renderActiveQuestion();
   if (isWordbookOpen) {

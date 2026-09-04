@@ -807,7 +807,6 @@ h1, h2, p { margin-top: 0; }
 .wordbook-status-badge[data-status="remembered"] { background: var(--color-success-soft); color: var(--color-success-text); }
 .wordbook-status-action { border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-primary-text); }
 .wordbook-status-action:hover:not(:disabled) { border-color: var(--color-primary-border); background: var(--color-primary-soft); }
-.wordbook-current-note { display: block; margin-top: 4px; color: var(--color-warning-text); font-size: 11px; }
 .wordbook-empty { padding: 52px 24px; color: var(--muted); text-align: center; }
 
 .category-create-form {

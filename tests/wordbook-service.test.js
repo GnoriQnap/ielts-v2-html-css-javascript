@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { createDefaultAppState } from "../js/core/storage.js";
+import { recordAnswer } from "../js/core/learning-service.js";
 import { createVocabularyIndex } from "../js/core/vocabulary-index.js";
 import { createDefaultRoundProgress } from "../js/core/round-service.js";
 import {
@@ -125,18 +126,31 @@ test("remembered removes review scheduling and review does not schedule an error
   assert.deepEqual(review.state.practice.reviewQueue, []);
 });
 
-test("manual status change is blocked for the active question", () => {
+test("manual status change invalidates the matching active question", () => {
   const state = createDefaultAppState();
-  state.practice.activeQuestion = { wordKey: "sustain" };
+  state.learning.byWordKey.sustain = { status: "review", answerCount: 2 };
+  state.practice.reviewQueue = [{ wordKey: "sustain" }];
+  state.practice.activeQuestion = { wordKey: "sustain", phase: "answering" };
 
   const result = applyWordbookStatusChange({
     state,
     wordKey: "sustain",
     status: "remembered"
   });
-  assert.equal(result.applied, false);
-  assert.equal(result.reason, "active-question");
-  assert.equal(result.state, state);
+  assert.equal(result.applied, true);
+  assert.equal(result.activeQuestionInvalidated, true);
+  assert.equal(result.state.practice.activeQuestion, null);
+  assert.equal(result.state.learning.byWordKey.sustain.status, "remembered");
+  assert.equal(result.state.learning.byWordKey.sustain.answerCount, 2);
+  assert.deepEqual(result.state.practice.reviewQueue, []);
+  const staleSubmit = recordAnswer({
+    learning: result.state.learning,
+    activeQuestion: result.state.practice.activeQuestion,
+    isCorrect: false,
+    answeredAt: "2026-07-17T02:30:00.000Z"
+  });
+  assert.equal(staleSubmit.applied, false);
+  assert.equal(staleSubmit.learning.byWordKey.sustain.answerCount, 2);
 });
 
 test("manual status changes synchronize and can complete an active round", () => {
@@ -157,6 +171,7 @@ test("manual status changes synchronize and can complete an active round", () =>
       }
     ]))
   };
+  state.practice.activeQuestion = { wordKey: "sustain", phase: "answering" };
 
   const completed = applyWordbookStatusChange({
     state,
@@ -166,6 +181,7 @@ test("manual status changes synchronize and can complete an active round", () =>
   });
   assert.equal(completed.state.rounds.current, null);
   assert.equal(completed.state.rounds.lastCompletedSummary.masteredCount, 5);
+  assert.equal(completed.state.practice.activeQuestion, null);
 
   const reopenedState = createDefaultAppState();
   reopenedState.learning.byWordKey.sustain = { status: "remembered" };

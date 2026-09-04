@@ -2,7 +2,7 @@ import {
   getLearningRecord,
   LEARNING_STATUSES,
   setLearningStatus
-} from "./learning-service.js";
+} from "./learning-service.js?v=10.7c";
 import { removeReviewItem } from "./review-scheduler.js";
 import {
   completeRound,
@@ -105,11 +105,11 @@ export function filterWordbookEntries(entries, options = {}) {
 }
 
 export function applyWordbookStatusChange({ state, wordKey, status, changedAt }) {
+  const activeQuestionInvalidated = state.practice.activeQuestion?.wordKey === wordKey;
   const learningResult = setLearningStatus({
     learning: state.learning,
     wordKey,
     status,
-    activeQuestion: state.practice.activeQuestion,
     changedAt
   });
   if (!learningResult.applied) {
@@ -131,12 +131,14 @@ export function applyWordbookStatusChange({ state, wordKey, status, changedAt })
       learning: learningResult.learning,
       practice: {
         ...state.practice,
+        activeQuestion: activeQuestionInvalidated ? null : state.practice.activeQuestion,
         reviewQueue
       },
       rounds
     },
     applied: true,
-    reason: null
+    reason: null,
+    activeQuestionInvalidated
   };
 }
 

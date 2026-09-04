@@ -4,12 +4,31 @@ import test from "node:test";
 
 import {
   createSupabaseClientProvider,
+  hasPersistedSupabaseSession,
   SUPABASE_BROWSER_OPTIONS,
   validateSupabaseBrowserConfig
 } from "../js/core/supabase-client.js";
 
 const VALID_URL = "https://project-ref.supabase.co";
 const VALID_KEY = "sb_publishable_browser_test_key";
+
+test("startup can distinguish a definite Guest from a persisted Supabase session without reading its contents", () => {
+  const requestedKeys = [];
+  const storage = {
+    getItem(key) {
+      requestedKeys.push(key);
+      return key === "sb-project-ref-auth-token" ? "opaque-session" : null;
+    }
+  };
+
+  assert.equal(hasPersistedSupabaseSession({ url: VALID_URL, storage }), true);
+  assert.deepEqual(requestedKeys, ["sb-project-ref-auth-token"]);
+  assert.equal(hasPersistedSupabaseSession({
+    url: VALID_URL,
+    storage: { getItem: () => null }
+  }), false);
+  assert.equal(hasPersistedSupabaseSession({ url: "not a url", storage }), false);
+});
 
 test("correct browser configuration creates one shared client", async () => {
   const calls = [];

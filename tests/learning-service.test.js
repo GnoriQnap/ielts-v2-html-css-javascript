@@ -113,7 +113,7 @@ test("the same active question cannot increment statistics twice", () => {
   assert.equal(record.correctCount, 1);
 });
 
-test("manual status changes preserve statistics and block the active question", () => {
+test("manual status changes preserve statistics even for the active question", () => {
   const learning = createLearning();
   learning.byWordKey.critical = {
     ...getLearningRecord(learning, "critical"),
@@ -131,15 +131,16 @@ test("manual status changes preserve statistics and block the active question", 
   assert.equal(changed.learning.byWordKey.critical.correctCount, 2);
   assert.equal(changed.learning.byWordKey.critical.answerCount, 3);
 
-  const blocked = setLearningStatus({
+  const activeWordChange = setLearningStatus({
     learning: changed.learning,
     wordKey: "critical",
     status: LEARNING_STATUSES.REVIEW,
     activeQuestion: { wordKey: "critical" }
   });
-  assert.equal(blocked.applied, false);
-  assert.equal(blocked.reason, "active-question");
-  assert.equal(blocked.learning.byWordKey.critical.status, LEARNING_STATUSES.REMEMBERED);
+  assert.equal(activeWordChange.applied, true);
+  assert.equal(activeWordChange.reason, null);
+  assert.equal(activeWordChange.learning.byWordKey.critical.status, LEARNING_STATUSES.REVIEW);
+  assert.equal(activeWordChange.learning.byWordKey.critical.answerCount, 3);
 });
 
 test("removing a learning record preserves all other word records", () => {
