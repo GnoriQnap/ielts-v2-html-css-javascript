@@ -1,5 +1,11 @@
 import { getLearningRecord } from "./learning-service.js";
 import { normalizeWordKey } from "./normalization.js";
+import {
+  isOfficialGroupId,
+  isOfficialWordKey,
+  OFFICIAL_VOCABULARY_ERROR_CODES,
+  officialVocabularyError
+} from "./official-vocabulary-identity.js";
 
 export function addVocabularyWord(vocabulary, displayValue, groupIds) {
   const vocabularyList = getVocabularyList(vocabulary);
@@ -68,6 +74,34 @@ export function editVocabularyWord(vocabulary, wordKeyValue, displayValue, group
   }
 
   const selectedGroupIds = validateSelectedGroupIds(vocabularyList, groupIds);
+  if (isOfficialWordKey(wordKey)) {
+    const currentDisplayText = findDisplayText(vocabularyList, wordKey);
+    if (displayText !== currentDisplayText) {
+      throw officialVocabularyError(
+        OFFICIAL_VOCABULARY_ERROR_CODES.WORD_READ_ONLY,
+        "系统词条展示文本不可修改。",
+        { wordKey }
+      );
+    }
+    const currentGroupIds = findGroupIds(vocabularyList, wordKey);
+    if (!sameIntegerSet(currentGroupIds, selectedGroupIds)) {
+      const addedCustomGroupId = selectedGroupIds.find((groupId) => (
+        !currentGroupIds.includes(groupId) && !isOfficialGroupId(groupId)
+      ));
+      if (addedCustomGroupId !== undefined) {
+        throw officialVocabularyError(
+          OFFICIAL_VOCABULARY_ERROR_CODES.CUSTOM_CATEGORY_UNSUPPORTED,
+          "系统词条不能加入自定义分类。",
+          { wordKey, groupId: addedCustomGroupId }
+        );
+      }
+      throw officialVocabularyError(
+        OFFICIAL_VOCABULARY_ERROR_CODES.RELATION_READ_ONLY,
+        "系统词条的分类关系不可修改。",
+        { wordKey }
+      );
+    }
+  }
   const selectedGroupIdSet = new Set(selectedGroupIds);
   const nextVocabulary = clonePlain({
     ...vocabulary,
@@ -120,6 +154,13 @@ export function removeVocabularyWordRelation(
     .find((word) => normalizeWordKey(word) === wordKey);
   if (!wordKey || sourceWord === undefined) {
     throw new RangeError("该词条不属于当前分类。");
+  }
+  if (isOfficialWordKey(wordKey)) {
+    throw officialVocabularyError(
+      OFFICIAL_VOCABULARY_ERROR_CODES.RELATION_READ_ONLY,
+      "系统词条的分类关系不可修改。",
+      { wordKey, groupId }
+    );
   }
 
   const protectedKeys = new Set(
@@ -187,6 +228,13 @@ export function deleteCustomVocabularyWord(
     throw new RangeError("要删除的词条不存在。");
   }
 
+  if (isOfficialWordKey(wordKey)) {
+    throw officialVocabularyError(
+      OFFICIAL_VOCABULARY_ERROR_CODES.WORD_READ_ONLY,
+      "系统词库词条不能删除。",
+      { wordKey }
+    );
+  }
   if (normalizeWordKeySet(systemWordKeys).has(wordKey)) {
     throw new RangeError("系统词库词条不能删除。");
   }
@@ -262,6 +310,26 @@ function hasWordKey(vocabularyList, wordKey) {
   return vocabularyList.some((group) => (
     Array.isArray(group?.words) && group.words.some((word) => normalizeWordKey(word) === wordKey)
   ));
+}
+
+function findDisplayText(vocabularyList, wordKey) {
+  return vocabularyList
+    .flatMap((group) => Array.isArray(group?.words) ? group.words : [])
+    .find((word) => normalizeWordKey(word) === wordKey);
+}
+
+function findGroupIds(vocabularyList, wordKey) {
+  return vocabularyList
+    .filter((group) => Array.isArray(group?.words) && group.words.some(
+      (word) => normalizeWordKey(word) === wordKey
+    ))
+    .map((group) => group.group_id);
+}
+
+function sameIntegerSet(left, right) {
+  const leftSet = new Set(left);
+  const rightSet = new Set(right);
+  return leftSet.size === rightSet.size && [...leftSet].every((value) => rightSet.has(value));
 }
 
 function normalizeWordKeySet(values) {

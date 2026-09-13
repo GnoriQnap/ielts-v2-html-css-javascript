@@ -10,6 +10,7 @@ import {
 import { createVocabularyRepository } from "../js/core/vocabulary-repository.js";
 import { createDefaultAppState } from "../js/core/storage.js";
 import { createVocabularyDetailsViewModel } from "../js/ui/vocabulary-details-view.js";
+import { addVocabularyWord } from "../js/core/vocabulary-word-service.js";
 
 class MemoryStorage {
   constructor() {
@@ -42,19 +43,23 @@ function createLoadedRepository() {
     fallbackVocabulary
   });
   repository.load();
+  const first = addVocabularyWord(repository.getCurrentVocabulary(), "sampleidea", [1]);
+  repository.save(first.vocabulary);
+  const second = addVocabularyWord(repository.getCurrentVocabulary(), "samplestudy", [2]);
+  repository.save(second.vocabulary);
   return repository;
 }
 
-function ideaDraft() {
+function sampleideaDraft() {
   return {
     phonetics: {
       uk: "/aɪˈdɪə/",
       us: "/aɪˈdiːə/"
     },
     meanings: [{ partOfSpeech: "n.", definitionZh: "想法；观点" }],
-    collocations: [{ phrase: "have an idea", meaningZh: "有一个想法" }],
+    collocations: [{ phrase: "have an sampleidea", meaningZh: "有一个想法" }],
     examples: [{
-      en: "She came up with a new idea.",
+      en: "She came up with a new sampleidea.",
       zh: "她提出了一个新想法。"
     }]
   };
@@ -63,7 +68,7 @@ function ideaDraft() {
 test("a legal AI details JSON file is prepared before confirmation and then imported", async () => {
   const repository = createLoadedRepository();
   const beforeVocabulary = repository.getCurrentVocabulary();
-  const text = JSON.stringify({ idea: ideaDraft() });
+  const text = JSON.stringify({ sampleidea: sampleideaDraft() });
   const file = {
     name: "word-details.json",
     size: text.length,
@@ -81,13 +86,13 @@ test("a legal AI details JSON file is prepared before confirmation and then impo
 
   const result = commitVocabularyDetailsImport(repository, prepared);
 
-  assert.deepEqual(result.importedWordKeys, ["idea"]);
-  assert.deepEqual(repository.getWordDetails("idea"), {
+  assert.deepEqual(result.importedWordKeys, ["sampleidea"]);
+  assert.deepEqual(repository.getWordDetails("sampleidea"), {
     phonetics: { uk: "/aɪˈdɪə/", us: "/aɪˈdiːə/" },
     meanings: [{ partOfSpeech: "n.", definitionZh: "想法；观点" }],
-    collocations: ["have an idea — 有一个想法"],
+    collocations: ["have an sampleidea — 有一个想法"],
     examples: [{
-      en: "She came up with a new idea.",
+      en: "She came up with a new sampleidea.",
       zh: "她提出了一个新想法。"
     }],
     notes: "",
@@ -103,7 +108,7 @@ test("a legal AI details JSON file is prepared before confirmation and then impo
 test("an unknown wordKey is rejected without modifying the repository", () => {
   const repository = createLoadedRepository();
   const before = repository.getCurrentVocabulary();
-  const prepared = prepareVocabularyDetailsImportData({ missing: ideaDraft() }, repository);
+  const prepared = prepareVocabularyDetailsImportData({ missing: sampleideaDraft() }, repository);
 
   assert.deepEqual(prepared.summary, {
     totalCount: 1,
@@ -126,13 +131,13 @@ test("an unknown wordKey is rejected without modifying the repository", () => {
 test("wrong field types and missing required item fields are rejected", () => {
   const repository = createLoadedRepository();
   const prepared = prepareVocabularyDetailsImportText(JSON.stringify({
-    idea: {
+    sampleidea: {
       phonetics: { uk: 42 }
     },
-    study: {
+    samplestudy: {
       meanings: [{ partOfSpeech: "n." }],
-      collocations: [{ phrase: "have an idea" }],
-      examples: [{ en: "An idea." }]
+      collocations: [{ phrase: "have an sampleidea" }],
+      examples: [{ en: "An sampleidea." }]
     }
   }), repository);
   const codes = new Set(prepared.failures.flatMap((failure) => (
@@ -148,8 +153,8 @@ test("wrong field types and missing required item fields are rejected", () => {
 test("valid words can be committed when other draft words fail", () => {
   const repository = createLoadedRepository();
   const prepared = prepareVocabularyDetailsImportData({
-    idea: ideaDraft(),
-    missing: ideaDraft()
+    sampleidea: sampleideaDraft(),
+    missing: sampleideaDraft()
   }, repository);
 
   assert.deepEqual(prepared.summary, {
@@ -161,29 +166,29 @@ test("valid words can be committed when other draft words fail", () => {
 
   assert.equal(result.importedCount, 1);
   assert.equal(result.failureCount, 1);
-  assert.equal(repository.getWordDetails("idea").meanings[0].definitionZh, "想法；观点");
+  assert.equal(repository.getWordDetails("sampleidea").meanings[0].definitionZh, "想法；观点");
 });
 
 test("imported details are immediately readable by the Vocabulary Card view model", () => {
   const repository = createLoadedRepository();
-  const prepared = prepareVocabularyDetailsImportData({ idea: ideaDraft() }, repository);
+  const prepared = prepareVocabularyDetailsImportData({ sampleidea: sampleideaDraft() }, repository);
   commitVocabularyDetailsImport(repository, prepared);
 
   const model = createVocabularyDetailsViewModel({
-    displayText: "idea",
-    details: repository.getWordDetails("idea")
+    displayText: "sampleidea",
+    details: repository.getWordDetails("sampleidea")
   });
 
   assert.equal(model.isEmpty, false);
   assert.equal(model.meanings[0].definitionZh, "想法；观点");
-  assert.deepEqual(model.collocations, ["have an idea\u00A0\u00A0有一个想法"]);
-  assert.equal(model.examples[0].en, "She came up with a new idea.");
+  assert.deepEqual(model.collocations, ["have an sampleidea\u00A0\u00A0有一个想法"]);
+  assert.equal(model.examples[0].en, "She came up with a new sampleidea.");
 });
 
 test("details import cannot change learning, review queue, or round history", () => {
   const repository = createLoadedRepository();
   const appState = createDefaultAppState();
-  appState.learning.byWordKey.idea = {
+  appState.learning.byWordKey.sampleidea = {
     status: "review",
     correctCount: 2,
     errorCount: 1,
@@ -194,7 +199,7 @@ test("details import cannot change learning, review queue, or round history", ()
     roundsEntered: 0
   };
   appState.practice.reviewQueue = [{
-    wordKey: "idea",
+    wordKey: "sampleidea",
     scope: "free",
     roundId: null,
     scheduledAtAttempt: 1,
@@ -206,7 +211,7 @@ test("details import cannot change learning, review queue, or round history", ()
 
   commitVocabularyDetailsImport(
     repository,
-    prepareVocabularyDetailsImportData({ idea: ideaDraft() }, repository)
+    prepareVocabularyDetailsImportData({ sampleidea: sampleideaDraft() }, repository)
   );
 
   assert.deepEqual(appState, before);
@@ -228,8 +233,8 @@ test("a save failure rolls back details already written in the same batch", () =
     }
   };
   const prepared = prepareVocabularyDetailsImportData({
-    idea: ideaDraft(),
-    study: ideaDraft()
+    sampleidea: sampleideaDraft(),
+    samplestudy: sampleideaDraft()
   }, failingRepository);
 
   assert.throws(

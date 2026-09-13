@@ -4,6 +4,7 @@ import {
   validateVocabularyDetails
 } from "./vocabulary-details.js";
 import { validateVocabularyData } from "./vocabulary-validator.js";
+import { isOfficialWordKey } from "./official-vocabulary-identity.js";
 
 export const MAX_VOCABULARY_DETAILS_IMPORT_BYTES = 5 * 1024 * 1024;
 
@@ -13,6 +14,7 @@ export const VOCABULARY_DETAILS_IMPORT_ERROR_CODES = Object.freeze({
   INVALID_ROOT: "invalid-root",
   WORD_NOT_FOUND: "word-not-found",
   INVALID_WORD_KEY: "invalid-word-key",
+  OFFICIAL_WORD_READ_ONLY: "official-word-read-only",
   INVALID_DETAILS: "invalid-details",
   MISSING_FIELD: "missing-field",
   FILE_TOO_LARGE: "file-too-large",
@@ -113,7 +115,11 @@ export function commitVocabularyDetailsImport(repository, preparedImport) {
     }
   } catch (error) {
     try {
-      repository.save(previousVocabulary);
+      if (typeof repository.saveMaintenanceVocabulary === "function") {
+        repository.saveMaintenanceVocabulary(previousVocabulary);
+      } else {
+        repository.save(previousVocabulary);
+      }
     } catch {
       // Preserve the original failure as the public error.
     }
@@ -132,6 +138,9 @@ function inspectDraftEntry(rawWordKey, candidate, index) {
   const wordKey = normalizeWordKey(rawWordKey);
   if (!wordKey || wordKey !== rawWordKey) {
     return rejected(rawWordKey, "INVALID_WORD_KEY", "wordKey 必须使用词库中的规范标识");
+  }
+  if (isOfficialWordKey(wordKey)) {
+    return rejected(wordKey, "OFFICIAL_WORD_READ_ONLY", "系统词条详情不可修改");
   }
   if (!index.displayByWordKey.has(wordKey)) {
     return rejected(wordKey, "WORD_NOT_FOUND", "wordKey 不存在于当前词库");

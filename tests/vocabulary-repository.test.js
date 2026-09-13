@@ -8,6 +8,7 @@ import { validateVocabularyData } from "../js/core/vocabulary-validator.js";
 import { createQuestion } from "../js/core/question-engine.js";
 import { createWordbookEntries } from "../js/core/wordbook-service.js";
 import { createDefaultAppState } from "../js/core/storage.js";
+import { addVocabularyWord } from "../js/core/vocabulary-word-service.js";
 
 class MemoryStorage {
   constructor() {
@@ -57,7 +58,7 @@ test("repository saves a dedicated vocabulary cache and reloads it", () => {
   const updatedVocabulary = structuredClone(fallbackVocabulary);
   updatedVocabulary.vocabulary_list[0].category = "关键";
 
-  repository.save(updatedVocabulary);
+  repository.saveMaintenanceVocabulary(updatedVocabulary);
   const cache = JSON.parse(storage.getItem(VOCABULARY_STORAGE_KEY));
   const reloaded = createVocabularyRepository({ storage, fallbackVocabulary }).load();
 
@@ -66,7 +67,7 @@ test("repository saves a dedicated vocabulary cache and reloads it", () => {
   assert.equal(reloaded.vocabulary_list[0].category, "关键");
 });
 
-test("repository can migrate the vocabulary embedded in a legacy user state", () => {
+test("legacy incompatible vocabulary remains readable without being silently migrated or rewritten", () => {
   const storage = new MemoryStorage();
   const legacyVocabulary = structuredClone(fallbackVocabulary);
   legacyVocabulary.vocabulary_list[0].category = "旧存档分类";
@@ -83,13 +84,12 @@ test("repository can migrate the vocabulary embedded in a legacy user state", ()
   });
 
   assert.equal(repository.load().vocabulary_list[0].category, "旧存档分类");
-  assert.equal(
-    JSON.parse(storage.getItem(VOCABULARY_STORAGE_KEY)).vocabulary.vocabulary_list[0].category,
-    "旧存档分类"
-  );
+  assert.equal(storage.getItem(VOCABULARY_STORAGE_KEY), null);
   assert.deepEqual(JSON.parse(storage.getItem("legacy-user-state")), {
+    vocabulary: legacyVocabulary,
     learning: { byWordKey: {} }
   });
+  assert.equal(repository.getOfficialCompatibility().status, "legacy-incompatible");
 });
 
 test("damaged or invalid cache falls back safely", () => {
@@ -148,6 +148,8 @@ test("setWordDetails saves normalized details and survives repository reload", (
   const storage = new MemoryStorage();
   const repository = createVocabularyRepository({ storage, fallbackVocabulary });
   repository.load();
+  const added = addVocabularyWord(repository.getCurrentVocabulary(), "sampleterm", [1]);
+  repository.save(added.vocabulary);
   const details = {
     phonetics: { uk: "/ˈkrɪtɪkəl/", us: "/ˈkrɪtɪkəl/" },
     meanings: [{ partOfSpeech: "adjective", definitionZh: "关键的" }],
@@ -158,13 +160,13 @@ test("setWordDetails saves normalized details and survives repository reload", (
     updatedAt: "2026-07-22T10:00:00.000Z"
   };
 
-  repository.setWordDetails("critical", details);
+  repository.setWordDetails("sampleterm", details);
   const reloaded = createVocabularyRepository({ storage, fallbackVocabulary });
   reloaded.load();
 
-  assert.deepEqual(reloaded.getWordDetails("critical"), details);
+  assert.deepEqual(reloaded.getWordDetails("sampleterm"), details);
   assert.deepEqual(
-    reloaded.getCurrentVocabulary().word_details.critical,
+    reloaded.getCurrentVocabulary().word_details.sampleterm,
     details
   );
 });
@@ -175,6 +177,8 @@ test("word details inputs and outputs are deep copies", () => {
     fallbackVocabulary
   });
   repository.load();
+  const added = addVocabularyWord(repository.getCurrentVocabulary(), "sampleterm", [1]);
+  repository.save(added.vocabulary);
   const input = {
     phonetics: { uk: "/test/" },
     meanings: [{ definitionZh: "测试" }],
@@ -182,14 +186,14 @@ test("word details inputs and outputs are deep copies", () => {
     examples: [{ en: "A test." }]
   };
 
-  const saved = repository.setWordDetails("study", input);
+  const saved = repository.setWordDetails("sampleterm", input);
   input.phonetics.uk = "/changed/";
   input.meanings[0].definitionZh = "已修改";
   saved.collocations.push("changed");
-  const firstRead = repository.getWordDetails("study");
+  const firstRead = repository.getWordDetails("sampleterm");
   firstRead.examples[0].en = "Changed.";
 
-  assert.deepEqual(repository.getWordDetails("study"), {
+  assert.deepEqual(repository.getWordDetails("sampleterm"), {
     phonetics: { uk: "/test/", us: "" },
     meanings: [{ partOfSpeech: "", definitionZh: "测试" }],
     collocations: ["test case"],

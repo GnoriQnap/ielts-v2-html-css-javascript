@@ -1,5 +1,8 @@
-import { vocabularyData } from "../data/vocabulary.js";
 import { normalizeCategoryName, normalizeWordKey } from "./normalization.js";
+import {
+  officialSystemGroupIds,
+  officialSystemWordKeys
+} from "./official-vocabulary-identity.js";
 import {
   normalizeVocabularyDetails,
   validateVocabularyDetails
@@ -8,13 +11,7 @@ import { validateVocabularyData } from "./vocabulary-validator.js";
 
 export const CUSTOM_VOCABULARY_SCHEMA_VERSION = 1;
 
-export const officialSystemWordKeys = Object.freeze(
-  collectOfficialWordKeys(vocabularyData)
-);
-
-export const officialSystemGroupIds = Object.freeze(
-  vocabularyData.vocabulary_list.map(({ group_id: groupId }) => groupId)
-);
+export { officialSystemGroupIds, officialSystemWordKeys };
 
 const CATEGORY_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DANGEROUS_KEYS = new Set(["__proto__", "prototype", "constructor"]);

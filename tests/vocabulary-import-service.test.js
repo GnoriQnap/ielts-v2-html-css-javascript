@@ -184,7 +184,7 @@ test("a repository save failure leaves the original vocabulary intact", () => {
     getCurrentVocabulary() {
       return structuredClone(before);
     },
-    save() {
+    saveMaintenanceVocabulary() {
       throw new Error("quota exceeded");
     }
   };

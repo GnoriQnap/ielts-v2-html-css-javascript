@@ -24,7 +24,7 @@ test("account panel exposes only the lightweight cloud connection status", async
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /id="account-cloud-status"/);
   assert.match(html, /id="account-cloud-reload"[^>]*hidden/);
-  assert.match(html, /app\.js\?v=10\.7c/);
+  assert.match(html, /app\.js\?v=10\.8b1b/);
   assert.match(html, /当前学习进度保存在此设备/);
 
   const app = await readFile(new URL("../js/app.js", import.meta.url), "utf8");

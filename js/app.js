@@ -1,4 +1,3 @@
-import { vocabularyData } from "./data/vocabulary.js";
 import { defaultVocabularyData } from "./data/default-vocabulary.js";
 import { validateVocabularyData } from "./core/vocabulary-validator.js?v=8.1";
 import {
@@ -20,7 +19,7 @@ import {
   saveAppState,
   STORAGE_KEY
 } from "./core/storage.js?v=8.4c1";
-import { createVocabularyRepository } from "./core/vocabulary-repository.js?v=8.4c1";
+import { createVocabularyRepository } from "./core/vocabulary-repository.js?v=10.8b1b";
 import { downloadVocabularyExport } from "./core/vocabulary-export-service.js?v=7.3a";
 import {
   assertVocabularyImportAllowed,
@@ -29,13 +28,13 @@ import {
   prepareVocabularyImportFile,
   resetVocabularyImportInput,
   VOCABULARY_IMPORT_ERROR_CODES
-} from "./core/vocabulary-import-service.js?v=7.3b";
+} from "./core/vocabulary-import-service.js?v=10.8b1b";
 import {
   addCategory,
   createCategoryList,
   deleteCategory,
   renameCategory
-} from "./core/vocabulary-category-service.js?v=7.2c1";
+} from "./core/vocabulary-category-service.js?v=10.8b1b";
 import {
   addVocabularyWord,
   createWordManagementEntries,
@@ -43,8 +42,13 @@ import {
   detectWordIdentityChange,
   editVocabularyWord,
   removeVocabularyWordRelation
-} from "./core/vocabulary-word-service.js?v=7.2c3b";
+} from "./core/vocabulary-word-service.js?v=10.8b1b";
 import { normalizeWordKey } from "./core/normalization.js";
+import {
+  isOfficialGroupId,
+  isOfficialWordKey,
+  officialSystemWordKeys
+} from "./core/official-vocabulary-identity.js?v=10.8b1b";
 import {
   PRACTICE_MODES,
   removeReviewItem,
@@ -99,13 +103,7 @@ const vocabularyRepository = createVocabularyRepository({
   fallbackVocabulary: defaultVocabularyData,
   legacyStateKey: STORAGE_KEY
 });
-const systemWordKeys = new Set(
-  vocabularyData.vocabulary_list
-    .flatMap((group) => Array.isArray(group?.words) ? group.words : [])
-    .map(normalizeWordKey)
-    .filter(Boolean)
-);
-const systemWordKeyList = [...systemWordKeys];
+const systemWordKeyList = [...officialSystemWordKeys];
 let currentVocabulary = vocabularyRepository.load();
 let report = vocabularyRepository.getCurrentValidation();
 const elements = {
@@ -1540,7 +1538,7 @@ function handleCategoryManagerClickB3(event) {
   } else if (action === "cancel-word") {
     editingCategoryWordKey = null;
   } else if (action === "delete-word-relation") {
-    if (systemWordKeys.has(wordKey)) {
+    if (isOfficialWordKey(wordKey)) {
       deleteWordRelationB3(groupId, wordKey);
     } else {
       deleteCustomWordB3(wordKey);
@@ -1708,7 +1706,6 @@ function deleteCustomWordB3(wordKey) {
 
 function createCustomWordDeletionB3(wordKey) {
   return deleteCustomVocabularyWord(currentVocabulary, wordKey, {
-    systemWordKeys,
     activeQuestionWordKey: appState.practice.activeQuestion?.wordKey ?? null,
     activeRoundWordKeys: appState.rounds.current?.wordKeys ?? []
   });
@@ -1885,6 +1882,12 @@ function createTreeCategorySummaryB3(item) {
   name.textContent = item.category;
   count.textContent = `${item.wordCount} 个词`;
   summary.append(name, count);
+  if (isOfficialGroupId(item.groupId)) {
+    const ownership = document.createElement("span");
+    ownership.className = "vocabulary-ownership-badge";
+    ownership.textContent = "系统分类";
+    summary.append(ownership);
+  }
   return summary;
 }
 
@@ -1905,6 +1908,9 @@ function createTreeCategoryEditFormB3(item) {
 function createTreeCategoryActionsB3(item) {
   const actions = document.createElement("div");
   actions.className = "category-tree-actions";
+  if (isOfficialGroupId(item.groupId)) {
+    return actions;
+  }
   if (item.groupId === editingCategoryGroupId) {
     actions.append(
       createTreeActionButtonB3("保存", "submit-category", item.groupId, "button-primary"),
@@ -1972,11 +1978,19 @@ function createTreeWordActionsB3(groupId, wordKey, isEditing) {
     const save = createTreeActionButtonB3("保存", "submit-word", groupId, "button-primary", wordKey);
     actions.append(save, createTreeActionButtonB3("取消", "cancel-word", groupId, "button-quiet", wordKey));
   } else {
-    actions.append(
-      createTreeActionButtonB3("查看单词释义", "view-details", groupId, "button-quiet", wordKey),
-      createTreeActionButtonB3("编辑", "edit-word", groupId, "button-quiet", wordKey),
-      createTreeActionButtonB3("删除", "delete-word-relation", groupId, "button-danger", wordKey)
-    );
+    actions.append(createTreeActionButtonB3(
+      "查看单词释义",
+      "view-details",
+      groupId,
+      "button-quiet",
+      wordKey
+    ));
+    if (!isOfficialWordKey(wordKey)) {
+      actions.append(
+        createTreeActionButtonB3("编辑", "edit-word", groupId, "button-quiet", wordKey),
+        createTreeActionButtonB3("删除", "delete-word-relation", groupId, "button-danger", wordKey)
+      );
+    }
   }
   return actions;
 }

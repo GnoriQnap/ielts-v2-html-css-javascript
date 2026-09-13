@@ -5,6 +5,12 @@ import {
   normalizeVocabularyDetails,
   requireVocabularyDetails
 } from "./vocabulary-details.js";
+import { detectOfficialVocabularyMutations } from "./custom-vocabulary-snapshot.js";
+import {
+  isOfficialWordKey,
+  OFFICIAL_VOCABULARY_ERROR_CODES,
+  officialVocabularyError
+} from "./official-vocabulary-identity.js";
 
 export const VOCABULARY_STORAGE_KEY = "ielts_synonym_trainer_vocabulary";
 export const VOCABULARY_CACHE_SCHEMA_VERSION = 1;
@@ -23,6 +29,7 @@ export function createVocabularyRepository(options = {}) {
   let fallbackValidation = null;
   let currentVocabulary = null;
   let currentValidation = null;
+  let officialCompatibility = { status: "clean", errors: [] };
 
   function getFallbackValidation() {
     if (!fallbackValidation) {
@@ -31,8 +38,11 @@ export function createVocabularyRepository(options = {}) {
     return fallbackValidation;
   }
 
-  function saveCurrentVocabulary(vocabulary) {
+  function saveCurrentVocabulary(vocabulary, { enforceOfficialBaseline = false } = {}) {
     const candidate = requireVocabularyData(vocabulary);
+    if (enforceOfficialBaseline) {
+      assertOfficialBaselinePreserved(candidate, fallback, currentVocabulary);
+    }
     const supplemented = supplementDefaultWordDetails(candidate, fallback);
     const nextVocabulary = supplemented.vocabulary;
     const validation = validator(nextVocabulary);
@@ -46,6 +56,7 @@ export function createVocabularyRepository(options = {}) {
     }
     currentVocabulary = cached.vocabulary;
     currentValidation = validation;
+    officialCompatibility = inspectOfficialCompatibility(currentVocabulary, fallback);
     return clonePlain(currentVocabulary);
   }
 
@@ -55,6 +66,7 @@ export function createVocabularyRepository(options = {}) {
       const legacy = readLegacyVocabulary(storage, legacyStateKey, validator);
       const source = cached?.vocabulary ?? legacy?.vocabulary ?? fallback;
       const sourceValidation = cached?.validation ?? legacy?.validation ?? getFallbackValidation();
+      const sourceCompatibility = inspectOfficialCompatibility(source, fallback);
       const shouldSupplement = Boolean(
         hasDefaultDetails && cached?.defaultDetailsVersion !== DEFAULT_DETAILS_VERSION
       );
@@ -66,12 +78,15 @@ export function createVocabularyRepository(options = {}) {
       }
       currentVocabulary = clonePlain(supplemented.vocabulary);
       currentValidation = sourceValidation;
+      officialCompatibility = sourceCompatibility;
       if (cached) {
-        if (shouldSupplement) {
+        if (shouldSupplement && sourceCompatibility.status !== "legacy-incompatible") {
           persistVocabularyCache(storage, currentVocabulary, now, hasDefaultDetails);
         }
-        removeLegacyVocabulary(storage, legacyStateKey);
-      } else if (legacy) {
+        if (sourceCompatibility.status !== "legacy-incompatible") {
+          removeLegacyVocabulary(storage, legacyStateKey);
+        }
+      } else if (legacy && sourceCompatibility.status !== "legacy-incompatible") {
         migrateLegacyVocabulary(
           storage,
           legacyStateKey,
@@ -84,6 +99,14 @@ export function createVocabularyRepository(options = {}) {
     },
 
     save(vocabulary) {
+      return saveCurrentVocabulary(vocabulary, { enforceOfficialBaseline: true });
+    },
+
+    saveUserVocabulary(vocabulary) {
+      return saveCurrentVocabulary(vocabulary, { enforceOfficialBaseline: true });
+    },
+
+    saveMaintenanceVocabulary(vocabulary) {
       return saveCurrentVocabulary(vocabulary);
     },
 
@@ -93,6 +116,10 @@ export function createVocabularyRepository(options = {}) {
 
     getCurrentValidation() {
       return currentValidation;
+    },
+
+    getOfficialCompatibility() {
+      return clonePlain(officialCompatibility);
     },
 
     getWordDetails(wordKeyValue) {
@@ -105,6 +132,13 @@ export function createVocabularyRepository(options = {}) {
 
     setWordDetails(wordKeyValue, details) {
       const wordKey = requireExistingWordKey(currentVocabulary, wordKeyValue);
+      if (isOfficialWordKey(wordKey)) {
+        throw officialVocabularyError(
+          OFFICIAL_VOCABULARY_ERROR_CODES.DETAILS_READ_ONLY,
+          "系统词条详情不可修改。",
+          { wordKey }
+        );
+      }
       const normalizedDetails = requireVocabularyDetails(details);
       const nextVocabulary = {
         ...currentVocabulary,
@@ -113,10 +147,56 @@ export function createVocabularyRepository(options = {}) {
           [wordKey]: normalizedDetails
         }
       };
-      saveCurrentVocabulary(nextVocabulary);
+      saveCurrentVocabulary(nextVocabulary, { enforceOfficialBaseline: true });
       return clonePlain(normalizedDetails);
     }
   };
+}
+
+function assertOfficialBaselinePreserved(candidate, fallback, previousVocabulary) {
+  const result = detectOfficialVocabularyMutations(candidate, fallback);
+  if (result.isValid) {
+    return;
+  }
+  const previous = previousVocabulary
+    ? detectOfficialVocabularyMutations(previousVocabulary, fallback)
+    : { isValid: true, errors: [] };
+  if (
+    !previous.isValid &&
+    sameOfficialMutationSet(result.errors, previous.errors)
+  ) {
+    // Legacy incompatibilities remain visible and untouched, while unrelated
+    // custom edits are still allowed. A user save may never add, remove, or
+    // alter an existing official-baseline incompatibility.
+    return;
+  }
+  throw officialVocabularyError(
+    OFFICIAL_VOCABULARY_ERROR_CODES.BASELINE_MUTATION,
+    "系统词库为只读，无法保存该修改。",
+    { issues: result.errors.map(({ code, context }) => ({ code, context })) }
+  );
+}
+
+function sameOfficialMutationSet(left, right) {
+  const normalize = (errors) => errors
+    .map(({ code, context }) => JSON.stringify([code, context ?? {}]))
+    .sort();
+  return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
+}
+
+function inspectOfficialCompatibility(candidate, fallback) {
+  const result = detectOfficialVocabularyMutations(candidate, fallback);
+  if (result.isValid) {
+    return { status: "clean", errors: [] };
+  }
+  const incompatibleErrors = result.errors.filter((error) => (
+    error.code !== "OFFICIAL_DETAILS_OVERRIDE" ||
+    hasNonEmptyDetails(candidate?.word_details?.[error.context?.wordKey])
+  ));
+  if (incompatibleErrors.length === 0) {
+    return { status: "recoverable", errors: clonePlain(result.errors) };
+  }
+  return { status: "legacy-incompatible", errors: clonePlain(incompatibleErrors) };
 }
 
 function readVocabularyCache(storage, validator) {

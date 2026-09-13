@@ -6,6 +6,7 @@ import {
   downloadVocabularyExport
 } from "../js/core/vocabulary-export-service.js";
 import { createVocabularyRepository } from "../js/core/vocabulary-repository.js";
+import { addVocabularyWord } from "../js/core/vocabulary-word-service.js";
 
 class MemoryStorage {
   constructor() {
@@ -54,14 +55,16 @@ function createLoadedRepository(source = vocabulary) {
 
 test("export data comes from the repository current vocabulary", () => {
   const repository = createLoadedRepository();
-  const current = repository.getCurrentVocabulary();
-  current.vocabulary_list[0].category = "当前保存的分类";
-  current.vocabulary_list[0].words.push("custom-word");
-  repository.save(current);
+  const current = addVocabularyWord(
+    repository.getCurrentVocabulary(),
+    "custom-word",
+    [1]
+  ).vocabulary;
+  repository.saveUserVocabulary(current);
 
   const exported = buildVocabularyExport(repository);
 
-  assert.equal(exported.vocabulary_list[0].category, "当前保存的分类");
+  assert.equal(exported.vocabulary_list[0].category, "重要的,关键的");
   assert.equal(exported.vocabulary_list[0].words.includes("custom-word"), true);
 });
 

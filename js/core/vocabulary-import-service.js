@@ -105,8 +105,12 @@ export function commitVocabularyImport(repository, preparedImport, options = {})
     saveRelatedState = null,
     validator = validateVocabularyData
   } = options;
-  if (!repository || typeof repository.save !== "function" || typeof repository.getCurrentVocabulary !== "function") {
-    throw new TypeError("必须提供有效的 vocabulary repository。");
+  if (
+    !repository ||
+    typeof repository.saveMaintenanceVocabulary !== "function" ||
+    typeof repository.getCurrentVocabulary !== "function"
+  ) {
+    throw new TypeError("完整词库导入必须使用 Developer Maintenance Repository 接口。");
   }
 
   const prepared = prepareVocabularyImportText(
@@ -118,7 +122,7 @@ export function commitVocabularyImport(repository, preparedImport, options = {})
   let repositorySaved = false;
 
   try {
-    repository.save(prepared.vocabulary);
+    repository.saveMaintenanceVocabulary(prepared.vocabulary);
     repositorySaved = true;
     const savedRelatedState = typeof saveRelatedState === "function"
       ? saveRelatedState(relatedState)
@@ -132,7 +136,7 @@ export function commitVocabularyImport(repository, preparedImport, options = {})
   } catch (error) {
     if (repositorySaved && previousVocabulary) {
       try {
-        repository.save(previousVocabulary);
+        repository.saveMaintenanceVocabulary(previousVocabulary);
       } catch {
         // The original error remains the most useful public failure reason.
       }

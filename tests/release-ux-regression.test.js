@@ -62,7 +62,7 @@ test("primary, danger, and reading text retain accessible contrast", () => {
 
 test("dashboard is rendered from the fixed official system word list", () => {
   const renderSource = sourceBetween("function renderDashboard()", "function openPracticeFromLink(");
-  assert.match(appSource, /const systemWordKeyList = \[\.\.\.systemWordKeys\];/);
+  assert.match(appSource, /const systemWordKeyList = \[\.\.\.officialSystemWordKeys\];/);
   assert.match(renderSource, /allWordKeys: systemWordKeyList/);
   assert.match(renderSource, /overallProgressCount\.textContent/);
   assert.match(renderSource, /overallProgressBar\.style\.width/);

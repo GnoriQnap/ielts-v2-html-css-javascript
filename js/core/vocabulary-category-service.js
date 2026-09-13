@@ -1,4 +1,9 @@
 import { normalizeCategoryName, normalizeWordKey } from "./normalization.js";
+import {
+  isOfficialGroupId,
+  OFFICIAL_VOCABULARY_ERROR_CODES,
+  officialVocabularyError
+} from "./official-vocabulary-identity.js";
 
 export function createCategoryList(vocabulary) {
   return getVocabularyList(vocabulary).map((group) => ({
@@ -38,6 +43,13 @@ export function renameCategory(vocabulary, groupId, categoryName) {
   if (groupIndex === -1) {
     throw new RangeError("没有找到需要编辑的分类。");
   }
+  if (isOfficialGroupId(groupId)) {
+    throw officialVocabularyError(
+      OFFICIAL_VOCABULARY_ERROR_CODES.CATEGORY_READ_ONLY,
+      "系统分类不可重命名。",
+      { groupId }
+    );
+  }
 
   const category = requireAvailableCategoryName(vocabularyList, categoryName, groupId);
   const nextList = vocabularyList.map((group, index) => index === groupIndex
@@ -56,6 +68,13 @@ export function deleteCategory(vocabulary, groupId, { protectedGroupIds = [] } =
   const group = vocabularyList.find((item) => item?.group_id === groupId);
   if (!group) {
     throw new RangeError("没有找到需要删除的分类。");
+  }
+  if (isOfficialGroupId(groupId)) {
+    throw officialVocabularyError(
+      OFFICIAL_VOCABULARY_ERROR_CODES.CATEGORY_READ_ONLY,
+      "系统分类不可删除。",
+      { groupId }
+    );
   }
 
   const protectedIds = new Set(

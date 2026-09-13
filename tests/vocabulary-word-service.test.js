@@ -34,7 +34,7 @@ class MemoryStorage {
 
 const vocabulary = {
   vocabulary_list: [
-    { group_id: 1, category: "保持", words: ["sustain"] },
+    { group_id: 1, category: "保持", words: ["learnerword"] },
     { group_id: 2, category: "支持", words: ["support"] },
     { group_id: 3, category: "研究", words: ["study"] },
     { group_id: 4, category: "改变", words: ["change"] },
@@ -51,13 +51,13 @@ test("adding a word preserves display text and creates one unique wordKey", () =
     displayText: "Maintain",
     groupIds: [1]
   });
-  assert.deepEqual(result.vocabulary.vocabulary_list[0].words, ["sustain", "Maintain"]);
-  assert.deepEqual(vocabulary.vocabulary_list[0].words, ["sustain"]);
+  assert.deepEqual(result.vocabulary.vocabulary_list[0].words, ["learnerword", "Maintain"]);
+  assert.deepEqual(vocabulary.vocabulary_list[0].words, ["learnerword"]);
 });
 
 test("empty, duplicate, missing, and unknown category input is rejected", () => {
   assert.throws(() => addVocabularyWord(vocabulary, " ", [1]), /不能为空/);
-  assert.throws(() => addVocabularyWord(vocabulary, " SUSTAIN ", [1]), /已存在/);
+  assert.throws(() => addVocabularyWord(vocabulary, " LEARNERWORD ", [1]), /已存在/);
   assert.throws(() => addVocabularyWord(vocabulary, "maintain", []), /至少选择/);
   assert.throws(() => addVocabularyWord(vocabulary, "maintain", [99]), /分类不存在/);
 });
@@ -74,7 +74,7 @@ test("one new word can belong to multiple categories", () => {
 
 test("new words appear in management search and default to new without changing user state", () => {
   const state = createDefaultAppState();
-  state.learning.byWordKey.sustain = {
+  state.learning.byWordKey.learnerword = {
     status: "remembered",
     correctCount: 3,
     errorCount: 1,
@@ -111,52 +111,52 @@ test("a repository-saved multi-category word survives reload and can generate a 
 });
 
 test("editing category memberships updates the wordbook index without changing word identity", () => {
-  const result = editVocabularyWord(vocabulary, "sustain", "sustain", [2, 3]);
+  const result = editVocabularyWord(vocabulary, "learnerword", "learnerword", [2, 3]);
   const index = createVocabularyIndex(result.vocabulary.vocabulary_list);
   const entries = createWordManagementEntries(index, { byWordKey: {} });
   const wordbookEntries = createWordbookEntries(index, { byWordKey: {} });
-  const sustain = entries.find((entry) => entry.wordKey === "sustain");
-  const wordbookSustain = wordbookEntries.find((entry) => entry.wordKey === "sustain");
-  const question = createQuestion(index, { wordKey: "sustain", random: () => 0 });
+  const learnerword = entries.find((entry) => entry.wordKey === "learnerword");
+  const wordbookLearnerword = wordbookEntries.find((entry) => entry.wordKey === "learnerword");
+  const question = createQuestion(index, { wordKey: "learnerword", random: () => 0 });
 
   assert.deepEqual(result.word.groupIds, [2, 3]);
-  assert.deepEqual([...index.groupIdsByWordKey.get("sustain")], [2, 3]);
-  assert.deepEqual(sustain.categories.map(({ category }) => category), ["支持", "研究"]);
-  assert.deepEqual(wordbookSustain.categories.map(({ category }) => category), ["支持", "研究"]);
+  assert.deepEqual([...index.groupIdsByWordKey.get("learnerword")], [2, 3]);
+  assert.deepEqual(learnerword.categories.map(({ category }) => category), ["支持", "研究"]);
+  assert.deepEqual(wordbookLearnerword.categories.map(({ category }) => category), ["支持", "研究"]);
   assert.deepEqual(new Set(question.correctGroupIds), new Set([2, 3]));
-  assert.equal(index.groupById.get(1).words.includes("sustain"), false);
+  assert.equal(index.groupById.get(1).words.includes("learnerword"), false);
 });
 
 test("editing display text preserves wordKey and remains searchable", () => {
-  const result = editVocabularyWord(vocabulary, "sustain", "Sustain", [1]);
+  const result = editVocabularyWord(vocabulary, "learnerword", "Learnerword", [1]);
   const index = createVocabularyIndex(result.vocabulary.vocabulary_list);
   const entries = createWordManagementEntries(index, { byWordKey: {} });
 
-  assert.equal(result.word.wordKey, "sustain");
-  assert.equal(index.displayByWordKey.get("sustain"), "Sustain");
-  assert.deepEqual(filterWordManagementEntries(entries, "SUSTAIN").map((entry) => entry.wordKey), ["sustain"]);
+  assert.equal(result.word.wordKey, "learnerword");
+  assert.equal(index.displayByWordKey.get("learnerword"), "Learnerword");
+  assert.deepEqual(filterWordManagementEntries(entries, "LEARNERWORD").map((entry) => entry.wordKey), ["learnerword"]);
 });
 
 test("editing rejects identity changes, empty categories, and missing words", () => {
   assert.throws(
-    () => editVocabularyWord(vocabulary, "sustain", "maintain", [1]),
+    () => editVocabularyWord(vocabulary, "learnerword", "maintain", [1]),
     /当前版本不支持修改词条唯一标识/
   );
-  assert.throws(() => editVocabularyWord(vocabulary, "sustain", "sustain", []), /至少选择/);
-  assert.throws(() => editVocabularyWord(vocabulary, "sustain", "sustain", [99]), /分类不存在/);
+  assert.throws(() => editVocabularyWord(vocabulary, "learnerword", "learnerword", []), /至少选择/);
+  assert.throws(() => editVocabularyWord(vocabulary, "learnerword", "learnerword", [99]), /分类不存在/);
   assert.throws(() => editVocabularyWord(vocabulary, "missing", "missing", [1]), /不存在/);
 });
 
 test("editing a word leaves learning, review queue, and the active question unchanged", () => {
   const state = createDefaultAppState();
-  state.learning.byWordKey.sustain = {
+  state.learning.byWordKey.learnerword = {
     status: "review",
     correctCount: 2,
     errorCount: 3,
     answerCount: 5
   };
   state.practice.reviewQueue = [{
-    wordKey: "sustain",
+    wordKey: "learnerword",
     scope: "free",
     roundId: null,
     scheduledAtAttempt: 1,
@@ -164,7 +164,7 @@ test("editing a word leaves learning, review queue, and the active question unch
     delay: 6
   }];
   state.practice.activeQuestion = {
-    wordKey: "sustain",
+    wordKey: "learnerword",
     optionGroupIds: [1, 2, 3, 4, 5, 6],
     correctGroupIds: [1],
     selectedGroupIds: [1],
@@ -173,7 +173,7 @@ test("editing a word leaves learning, review queue, and the active question unch
   };
   const stateSnapshot = structuredClone(state);
 
-  editVocabularyWord(vocabulary, "sustain", "Sustain", [1, 2]);
+  editVocabularyWord(vocabulary, "learnerword", "Learnerword", [1, 2]);
 
   assert.deepEqual(state, stateSnapshot);
 });
@@ -182,39 +182,41 @@ test("an edited word survives repository reload", () => {
   const storage = new MemoryStorage();
   const repository = createVocabularyRepository({ storage, fallbackVocabulary: vocabulary });
   repository.load();
-  const result = editVocabularyWord(repository.getCurrentVocabulary(), "sustain", "Sustain", [1, 2]);
+  const added = addVocabularyWord(repository.getCurrentVocabulary(), "sampleterm", [1]);
+  repository.save(added.vocabulary);
+  const result = editVocabularyWord(repository.getCurrentVocabulary(), "sampleterm", "Sampleterm", [1, 2]);
   repository.save(result.vocabulary);
 
   const reloaded = createVocabularyRepository({ storage, fallbackVocabulary: vocabulary }).load();
   const index = createVocabularyIndex(reloaded.vocabulary_list);
 
-  assert.equal(index.displayByWordKey.get("sustain"), "Sustain");
-  assert.deepEqual([...index.groupIdsByWordKey.get("sustain")], [1, 2]);
+  assert.equal(index.displayByWordKey.get("sampleterm"), "Sampleterm");
+  assert.deepEqual([...index.groupIdsByWordKey.get("sampleterm")], [1, 2]);
 });
 
 test("removing one relation from a multi-category word succeeds", () => {
   const source = {
     vocabulary_list: [
-      { group_id: 1, category: "保持", words: ["sustain"] },
-      { group_id: 2, category: "支持", words: ["sustain", "support"] }
+      { group_id: 1, category: "保持", words: ["learnerword"] },
+      { group_id: 2, category: "支持", words: ["learnerword", "support"] }
     ]
   };
 
-  const result = removeVocabularyWordRelation(source, "sustain", 1);
+  const result = removeVocabularyWordRelation(source, "learnerword", 1);
 
   assert.deepEqual(result.word, {
-    wordKey: "sustain",
-    displayText: "sustain",
+    wordKey: "learnerword",
+    displayText: "learnerword",
     removedGroupId: 1,
     remainingGroupIds: [2]
   });
   assert.deepEqual(result.vocabulary.vocabulary_list[0].words, []);
-  assert.deepEqual(source.vocabulary_list[0].words, ["sustain"]);
+  assert.deepEqual(source.vocabulary_list[0].words, ["learnerword"]);
 });
 
 test("removing the last category relation is rejected", () => {
   assert.throws(
-    () => removeVocabularyWordRelation(vocabulary, "sustain", 1),
+    () => removeVocabularyWordRelation(vocabulary, "learnerword", 1),
     /该词条目前只有一个分类。如删除将导致词条从词库消失。当前版本请先将词条加入其他分类后再删除。/
   );
 });
@@ -222,34 +224,34 @@ test("removing the last category relation is rejected", () => {
 test("a word remains visible in its other category after relation removal", () => {
   const source = {
     vocabulary_list: [
-      { group_id: 1, category: "保持", words: ["sustain"] },
-      { group_id: 2, category: "支持", words: ["sustain"] }
+      { group_id: 1, category: "保持", words: ["learnerword"] },
+      { group_id: 2, category: "支持", words: ["learnerword"] }
     ]
   };
-  const result = removeVocabularyWordRelation(source, "sustain", 1);
+  const result = removeVocabularyWordRelation(source, "learnerword", 1);
   const index = createVocabularyIndex(result.vocabulary.vocabulary_list);
 
-  assert.equal(index.displayByWordKey.get("sustain"), "sustain");
-  assert.deepEqual([...index.groupIdsByWordKey.get("sustain")], [2]);
-  assert.equal(index.groupById.get(2).words.includes("sustain"), true);
+  assert.equal(index.displayByWordKey.get("learnerword"), "learnerword");
+  assert.deepEqual([...index.groupIdsByWordKey.get("learnerword")], [2]);
+  assert.equal(index.groupById.get(2).words.includes("learnerword"), true);
 });
 
 test("relation removal leaves learning, review queue, and round history unchanged", () => {
   const source = {
     vocabulary_list: [
-      { group_id: 1, category: "保持", words: ["sustain"] },
-      { group_id: 2, category: "支持", words: ["sustain"] }
+      { group_id: 1, category: "保持", words: ["learnerword"] },
+      { group_id: 2, category: "支持", words: ["learnerword"] }
     ]
   };
   const state = createDefaultAppState();
-  state.learning.byWordKey.sustain = {
+  state.learning.byWordKey.learnerword = {
     status: "review",
     correctCount: 2,
     errorCount: 3,
     answerCount: 5
   };
   state.practice.reviewQueue = [{
-    wordKey: "sustain",
+    wordKey: "learnerword",
     scope: "free",
     roundId: null,
     scheduledAtAttempt: 1,
@@ -259,15 +261,15 @@ test("relation removal leaves learning, review queue, and round history unchange
   state.rounds.lastCompletedSummary = { roundId: "round-old", totalWords: 20 };
   const snapshot = structuredClone(state);
 
-  removeVocabularyWordRelation(source, "sustain", 1);
+  removeVocabularyWordRelation(source, "learnerword", 1);
 
   assert.deepEqual(state, snapshot);
 });
 
 test("the active question word is protected before the last-relation check", () => {
   assert.throws(
-    () => removeVocabularyWordRelation(vocabulary, "sustain", 1, {
-      protectedWordKeys: ["sustain"]
+    () => removeVocabularyWordRelation(vocabulary, "learnerword", 1, {
+      protectedWordKeys: ["learnerword"]
     }),
     /当前题正在使用该词条，暂时无法修改。/
   );
@@ -276,12 +278,12 @@ test("the active question word is protected before the last-relation check", () 
 test("relation removal updates the category word count", () => {
   const source = {
     vocabulary_list: [
-      { group_id: 1, category: "保持", words: ["sustain", "keep"] },
-      { group_id: 2, category: "支持", words: ["sustain"] }
+      { group_id: 1, category: "保持", words: ["learnerword", "keep"] },
+      { group_id: 2, category: "支持", words: ["learnerword"] }
     ]
   };
   const before = createCategoryList(source).find(({ groupId }) => groupId === 1);
-  const result = removeVocabularyWordRelation(source, "sustain", 1);
+  const result = removeVocabularyWordRelation(source, "learnerword", 1);
   const after = createCategoryList(result.vocabulary).find(({ groupId }) => groupId === 1);
 
   assert.equal(before.wordCount, 2);
@@ -290,15 +292,15 @@ test("relation removal updates the category word count", () => {
 
 test("display text can change while its normalized wordKey stays the same", () => {
   const detection = detectWordIdentityChange("thought", "  Thought  ");
-  const result = editVocabularyWord(vocabulary, "sustain", "Sustain", [1]);
+  const result = editVocabularyWord(vocabulary, "learnerword", "Learnerword", [1]);
 
   assert.deepEqual(detection, {
     changed: false,
     oldWordKey: "thought",
     newWordKey: "thought"
   });
-  assert.equal(result.word.displayText, "Sustain");
-  assert.equal(result.word.wordKey, "sustain");
+  assert.equal(result.word.displayText, "Learnerword");
+  assert.equal(result.word.wordKey, "learnerword");
 });
 
 test("display text that creates a different wordKey is detected", () => {
@@ -366,10 +368,11 @@ test("deleting a custom word removes every category relation and its details", (
 });
 
 test("system vocabulary words cannot be deleted", () => {
+  const source = {
+    vocabulary_list: [{ group_id: 1, category: "系统分类", words: ["idea"] }]
+  };
   assert.throws(
-    () => deleteCustomVocabularyWord(vocabulary, "sustain", {
-      systemWordKeys: new Set(["sustain", "support"])
-    }),
+    () => deleteCustomVocabularyWord(source, "idea"),
     /系统词库词条不能删除。/
   );
 });

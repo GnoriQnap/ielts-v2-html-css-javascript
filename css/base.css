@@ -1082,6 +1082,16 @@ h1, h2, p { margin-top: 0; }
 .category-tree-summary { display: flex; align-items: baseline; min-width: 0; gap: 14px; }
 .category-tree-summary strong { min-width: 0; overflow-wrap: anywhere; font-size: 16px; }
 .category-tree-summary span { flex: 0 0 auto; color: var(--muted); font-size: 13px; }
+.category-tree-summary .vocabulary-ownership-badge {
+  width: fit-content;
+  padding: 2px 8px;
+  border: 1px solid var(--color-border-soft);
+  border-radius: 999px;
+  background: var(--color-surface-soft);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
 .category-tree-actions,
 .category-tree-word-actions { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
 .category-tree-actions .button,
