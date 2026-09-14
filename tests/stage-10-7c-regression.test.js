@@ -29,6 +29,7 @@ test("each main page derives exactly one active navigation item", () => {
 test("startup preloads the large default details module and contains no artificial loading timer", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   const app = await readFile(new URL("../js/app.js", import.meta.url), "utf8");
+  const customIntegration = await readFile(new URL("../js/core/custom-vocabulary-integration.js", import.meta.url), "utf8");
 
   assert.match(html, /rel="modulepreload" href="\.\/js\/data\/default-vocabulary\.js"/);
   assert.match(html, /rel="modulepreload" href="\.\/js\/data\/vocabulary-details\.js"/);
@@ -36,7 +37,12 @@ test("startup preloads the large default details module and contains no artifici
   assert.match(app, /if \(!shouldHoldInitialLearningState\) \{\s*renderInitialLearningState\(\)/);
   assert.match(app, /if \(shouldHoldInitialLearningState\) \{[\s\S]*practiceMain\.inert = true/);
   assert.match(app, /function markLearningSurfaceReady\(\)[\s\S]*practiceMain\.inert = false/);
-  assert.match(app, /await learningStateRuntime\?\.handleAuthState\(authState\)/);
+  assert.match(app, /await customVocabularyIntegration\?\.handleAuthState\(authState\)/);
+  assert.doesNotMatch(
+    app,
+    /if \(!hasRenderedLearningState && learningStateRuntime\)[\s\S]*?applyRuntimeLearningState/
+  );
+  assert.match(customIntegration, /Vocabulary\/index must be active before the Learning Repository/);
   assert.doesNotMatch(app, /setTimeout\([^)]*3000|setTimeout\([^)]*3_000/);
 });
 

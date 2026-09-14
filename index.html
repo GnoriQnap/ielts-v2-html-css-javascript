@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="IELTS 英语词汇语义分类练习">
     <title>IELTS 同义替换练习</title>
-    <link rel="stylesheet" href="./css/base.css?v=10.8b1b">
+    <link rel="stylesheet" href="./css/base.css?v=10.8d2">
     <link rel="modulepreload" href="./js/data/default-vocabulary.js">
     <link rel="modulepreload" href="./js/data/vocabulary-details.js">
   </head>
@@ -360,6 +360,9 @@
           <p id="account-cloud-status" class="account-local-note" data-cloud-status="guest">当前学习进度保存在此设备。</p>
           <button id="account-cloud-reload" class="button button-primary button-full" type="button" hidden>重新载入云端进度</button>
           <button id="account-cloud-setup-open" class="button button-secondary button-full" type="button" hidden>设置账号学习进度</button>
+          <p id="account-custom-vocabulary-status" class="account-local-note" data-cloud-status="guest">自定义词汇：保存在此设备。</p>
+          <button id="account-custom-vocabulary-reload" class="button button-primary button-full" type="button" hidden>重新加载云端词汇</button>
+          <button id="account-custom-vocabulary-setup-open" class="button button-secondary button-full" type="button" hidden>设置账号自定义词汇</button>
           <button id="account-sign-out" class="button button-secondary button-full" type="button">退出登录</button>
         </section>
 
@@ -407,6 +410,29 @@
       </section>
     </div>
 
-    <script type="module" src="./js/app.js?v=10.8b1b"></script>
+    <div
+      id="custom-vocabulary-setup-overlay"
+      class="completion-modal cloud-learning-setup-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="custom-vocabulary-setup-title"
+      aria-hidden="true"
+      hidden
+    >
+      <section class="completion-card cloud-learning-setup-card custom-vocabulary-setup-card">
+        <header class="account-dialog-header">
+          <h2 id="custom-vocabulary-setup-title">设置账号自定义词汇</h2>
+        </header>
+        <p id="custom-vocabulary-setup-copy" class="cloud-learning-setup-copy">检测到这台设备上有自定义词汇。选择是否保存到账号。</p>
+        <div class="cloud-learning-setup-actions">
+          <button id="custom-vocabulary-save-guest" class="button button-primary button-full" type="button">保存到账号</button>
+          <button id="custom-vocabulary-start-empty" class="button button-secondary button-full" type="button">从零开始</button>
+        </div>
+        <p id="custom-vocabulary-setup-note" class="account-local-note">从零开始不会删除这台设备上的访客词汇。</p>
+        <p id="custom-vocabulary-setup-feedback" class="account-feedback" role="status" aria-live="polite"></p>
+      </section>
+    </div>
+
+    <script type="module" src="./js/app.js?v=10.8d2"></script>
   </body>
 </html>

@@ -218,12 +218,20 @@ export function createCustomVocabularyRuntime({
       result = { ok: false, status: CLOUD_CUSTOM_VOCABULARY_STATUSES.ERROR };
     }
     if (!isCurrentIdentity(operation)) return staleResult();
-    if (result.userId !== expectedUserId) return staleResult();
+    if (hasExplicitDifferentUserId(result, expectedUserId)) return staleResult();
 
-    if (result.ok && result.status === CLOUD_CUSTOM_VOCABULARY_STATUSES.FOUND) {
+    if (
+      result.ok &&
+      result.userId === expectedUserId &&
+      result.status === CLOUD_CUSTOM_VOCABULARY_STATUSES.FOUND
+    ) {
       return activateCloudSnapshot(result, operation);
     }
-    if (result.ok && result.status === CLOUD_CUSTOM_VOCABULARY_STATUSES.NOT_FOUND) {
+    if (
+      result.ok &&
+      result.userId === expectedUserId &&
+      result.status === CLOUD_CUSTOM_VOCABULARY_STATUSES.NOT_FOUND
+    ) {
       source = CUSTOM_VOCABULARY_SOURCES.PENDING_MIGRATION;
       currentSnapshot = guestBoundary.ok ? clonePlain(guestBoundary.snapshot) : null;
       migrationKind = getMigrationKind(guestBoundary);
@@ -615,6 +623,10 @@ function isValidRevision(value) {
 
 function isNonEmptyString(value) {
   return typeof value === "string" && value.length > 0;
+}
+
+function hasExplicitDifferentUserId(result, expectedUserId) {
+  return isNonEmptyString(result?.userId) && result.userId !== expectedUserId;
 }
 
 function staleResult() {

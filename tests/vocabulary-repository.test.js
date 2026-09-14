@@ -203,3 +203,16 @@ test("word details inputs and outputs are deep copies", () => {
     updatedAt: ""
   });
 });
+
+test("runtime vocabulary replacement rebuilds validation without writing the Guest cache", () => {
+  const storage = new MemoryStorage();
+  const repository = createVocabularyRepository({ storage, fallbackVocabulary });
+  repository.load();
+  const candidate = addVocabularyWord(repository.getCurrentVocabulary(), "runtime-only", [1]).vocabulary;
+  const cacheBefore = storage.getItem(VOCABULARY_STORAGE_KEY);
+
+  repository.replaceRuntimeVocabulary(candidate);
+
+  assert.equal(repository.getCurrentValidation().index.displayByWordKey.has("runtime-only"), true);
+  assert.equal(storage.getItem(VOCABULARY_STORAGE_KEY), cacheBefore);
+});

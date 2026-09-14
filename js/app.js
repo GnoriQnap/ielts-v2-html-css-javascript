@@ -82,11 +82,23 @@ import {
 import { createAuthService } from "./core/auth-service.js?v=10.2a";
 import { hasPersistedSupabaseSession } from "./core/supabase-client.js?v=10.7c";
 import { createCloudLearningStateRepository } from "./core/cloud-learning-state-repository.js?v=10.6b2";
+import { createCloudCustomVocabularyRepository } from "./core/cloud-custom-vocabulary-repository.js?v=10.8c";
 import {
   CLOUD_SYNC_STATUSES,
   createLearningStateRuntime,
   PERSISTENCE_INTENTS
 } from "./core/learning-state-runtime.js?v=10.7b";
+import {
+  CUSTOM_VOCABULARY_CREATE_ACTIONS,
+  CUSTOM_VOCABULARY_MIGRATION_KINDS,
+  CUSTOM_VOCABULARY_SOURCES,
+  CUSTOM_VOCABULARY_SYNC_STATUSES,
+  createCustomVocabularyRuntime
+} from "./core/custom-vocabulary-runtime.js?v=10.8d2";
+import {
+  createCustomVocabularyIntegration,
+  isActiveQuestionRenderable
+} from "./core/custom-vocabulary-integration.js?v=10.8d2";
 import {
   cleanEmailConfirmationCallbackUrl,
   createPendingSignupEmailStore,
@@ -94,6 +106,7 @@ import {
 } from "./core/auth-confirmation.js?v=10.2a";
 import { createAuthDialogController } from "./ui/auth-dialog.js?v=10.2a";
 import { createCloudLearningSetupDialog } from "./ui/cloud-learning-setup-dialog.js?v=10.7b";
+import { createCustomVocabularySetupDialog } from "./ui/custom-vocabulary-setup-dialog.js?v=10.8d2";
 import {
   createMainNavigationState,
   MAIN_VIEWS
@@ -106,6 +119,8 @@ const vocabularyRepository = createVocabularyRepository({
 const systemWordKeyList = [...officialSystemWordKeys];
 let currentVocabulary = vocabularyRepository.load();
 let report = vocabularyRepository.getCurrentValidation();
+let guestVocabulary = JSON.parse(JSON.stringify(currentVocabulary));
+let guestOfficialCompatibility = vocabularyRepository.getOfficialCompatibility();
 const elements = {
   siteHeader: document.querySelector("#site-header"),
   practiceMain: document.querySelector("#practice-main"),
@@ -211,6 +226,9 @@ const elements = {
   accountCloudStatus: document.querySelector("#account-cloud-status"),
   accountCloudReload: document.querySelector("#account-cloud-reload"),
   accountCloudSetupOpen: document.querySelector("#account-cloud-setup-open"),
+  accountCustomVocabularyStatus: document.querySelector("#account-custom-vocabulary-status"),
+  accountCustomVocabularyReload: document.querySelector("#account-custom-vocabulary-reload"),
+  accountCustomVocabularySetupOpen: document.querySelector("#account-custom-vocabulary-setup-open"),
   accountSignOut: document.querySelector("#account-sign-out"),
   accountConfirmationPending: document.querySelector("#account-confirmation-pending"),
   accountPendingEmail: document.querySelector("#account-pending-email"),
@@ -225,11 +243,21 @@ const elements = {
   cloudLearningSetupClose: document.querySelector("#cloud-learning-setup-close"),
   cloudLearningSaveGuest: document.querySelector("#cloud-learning-save-guest"),
   cloudLearningStartFresh: document.querySelector("#cloud-learning-start-fresh"),
-  cloudLearningSetupFeedback: document.querySelector("#cloud-learning-setup-feedback")
+  cloudLearningSetupFeedback: document.querySelector("#cloud-learning-setup-feedback"),
+  customVocabularySetupOverlay: document.querySelector("#custom-vocabulary-setup-overlay"),
+  customVocabularySetupTitle: document.querySelector("#custom-vocabulary-setup-title"),
+  customVocabularySetupCopy: document.querySelector("#custom-vocabulary-setup-copy"),
+  customVocabularySaveGuest: document.querySelector("#custom-vocabulary-save-guest"),
+  customVocabularyStartEmpty: document.querySelector("#custom-vocabulary-start-empty"),
+  customVocabularySetupNote: document.querySelector("#custom-vocabulary-setup-note"),
+  customVocabularySetupFeedback: document.querySelector("#custom-vocabulary-setup-feedback")
 };
 
 let appState = null;
 let learningStateRuntime = null;
+let customVocabularyRuntime = null;
+let customVocabularyIntegration = null;
+let customVocabularySetupDialogController = null;
 let persistenceError = "";
 let dismissedCompletionRoundId = null;
 let completionWasOpen = false;
@@ -392,6 +420,9 @@ window.addEventListener("hashchange", renderViewFromLocation);
 elements.accountCloudReload.addEventListener("click", () => {
   void learningStateRuntime?.reloadCloudLearningStateAfterConflict();
 });
+elements.accountCustomVocabularyReload.addEventListener("click", () => {
+  void reloadCustomVocabularyAfterConflict();
+});
 
 if (report.isValid) {
   appState = loadAppState({
@@ -411,12 +442,65 @@ if (report.isValid) {
     onRuntimeStateChange: applyRuntimeLearningState,
     onStatusChange: renderCloudLearningStatus
   });
+  const cloudCustomVocabularyRepository = createCloudCustomVocabularyRepository({
+    officialBaseline: defaultVocabularyData
+  });
+  customVocabularyRuntime = createCustomVocabularyRuntime({
+    guestVocabularyRepository: {
+      getCurrentVocabulary: () => JSON.parse(JSON.stringify(guestVocabulary)),
+      getOfficialCompatibility: () => JSON.parse(JSON.stringify(guestOfficialCompatibility))
+    },
+    cloudRepository: cloudCustomVocabularyRepository,
+    officialBaseline: defaultVocabularyData,
+    onStatusChange: renderCustomVocabularyStatus
+  });
+  customVocabularyIntegration = createCustomVocabularyIntegration({
+    customRuntime: customVocabularyRuntime,
+    learningRuntime: learningStateRuntime,
+    officialBaseline: defaultVocabularyData,
+    getGuestVocabulary: () => JSON.parse(JSON.stringify(guestVocabulary)),
+    saveGuestVocabulary: saveGuestVocabularyCandidate,
+    activateVocabulary: activateVocabularyForOwnership,
+    holdLearningSurface,
+    onVocabularyReady: handleVocabularyOwnershipReady
+  });
+  customVocabularySetupDialogController = createCustomVocabularySetupDialog({
+    integrationActions: {
+      completeMigration: (action) => customVocabularyIntegration.completeMigration(action)
+    },
+    runtimeActions: {
+      getStatus: () => customVocabularyRuntime.getStatus()
+    },
+    elements: {
+      open: elements.accountCustomVocabularySetupOpen,
+      overlay: elements.customVocabularySetupOverlay,
+      title: elements.customVocabularySetupTitle,
+      copy: elements.customVocabularySetupCopy,
+      saveGuest: elements.customVocabularySaveGuest,
+      startEmpty: elements.customVocabularyStartEmpty,
+      note: elements.customVocabularySetupNote,
+      feedback: elements.customVocabularySetupFeedback
+    },
+    body: document.body,
+    backgroundElements: [
+      elements.siteHeader,
+      elements.practiceMain,
+      elements.wordbookMain,
+      elements.vocabularyManagerMain,
+      elements.accountOverlay,
+      elements.cloudLearningSetupOverlay
+    ]
+  });
   dismissedCompletionRoundId = appState.rounds.lastCompletedSummary?.roundId ?? null;
 
   if (!shouldHoldInitialLearningState) {
     renderInitialLearningState();
   }
-  learningStateRuntime.connectAuthService(authService);
+  authService.subscribe((authState) => {
+    if (authState.status !== "loading") {
+      void customVocabularyIntegration.handleAuthState(authState);
+    }
+  });
 } else {
   showFatalError(report.errors.map((item) => item.message).join(" "));
 }
@@ -477,6 +561,46 @@ function markLearningSurfaceReady() {
   elements.practiceMain.removeAttribute("aria-busy");
 }
 
+function holdLearningSurface() {
+  elements.practiceMain.inert = true;
+  elements.practiceMain.setAttribute("aria-busy", "true");
+}
+
+function saveGuestVocabularyCandidate(candidate) {
+  vocabularyRepository.saveUserVocabulary(candidate);
+  guestVocabulary = vocabularyRepository.getCurrentVocabulary();
+  guestOfficialCompatibility = vocabularyRepository.getOfficialCompatibility();
+  return JSON.parse(JSON.stringify(guestVocabulary));
+}
+
+function activateVocabularyForOwnership(vocabulary, context = {}) {
+  vocabularyRepository.replaceRuntimeVocabulary(vocabulary);
+  currentVocabulary = vocabularyRepository.getCurrentVocabulary();
+  report = vocabularyRepository.getCurrentValidation();
+  wordbookDataCache.clear();
+  editingCategoryGroupId = null;
+  editingCategoryWordKey = null;
+  addingWordGroupId = null;
+  expandedManagerGroupIds.clear();
+  if (context.source === CUSTOM_VOCABULARY_SOURCES.GUEST_LOCAL) {
+    guestOfficialCompatibility = vocabularyRepository.getOfficialCompatibility();
+  }
+}
+
+function handleVocabularyOwnershipReady(context) {
+  if (context.reason === "conflict-reload" && hasRenderedLearningState) {
+    const activeQuestion = appState.practice.activeQuestion;
+    if (!isActiveQuestionRenderable(activeQuestion, report.index)) {
+      replaceActiveQuestion(activeQuestion?.wordKey ?? null, {
+        persist: false,
+        recordRoundEntry: false
+      });
+    }
+    renderActiveQuestion();
+    renderViewFromLocation();
+  }
+}
+
 function renderCloudLearningStatus(status) {
   if (!elements.accountCloudStatus) return;
   const messages = {
@@ -504,15 +628,43 @@ function renderCloudLearningStatus(status) {
   cloudLearningSetupDialogController.update(status);
 }
 
+function renderCustomVocabularyStatus(status) {
+  if (!elements.accountCustomVocabularyStatus) return;
+  const messages = {
+    [CUSTOM_VOCABULARY_SYNC_STATUSES.CONNECTED]: "自定义词汇：已同步。",
+    [CUSTOM_VOCABULARY_SYNC_STATUSES.PENDING_MIGRATION]: "自定义词汇：等待设置。",
+    [CUSTOM_VOCABULARY_SYNC_STATUSES.GUEST_SNAPSHOT_UNAVAILABLE]: "自定义词汇：本机词库无法直接同步。",
+    [CUSTOM_VOCABULARY_SYNC_STATUSES.LOADING]: "自定义词汇：正在连接…",
+    [CUSTOM_VOCABULARY_SYNC_STATUSES.CREATING]: "自定义词汇：正在建立…",
+    [CUSTOM_VOCABULARY_SYNC_STATUSES.SAVING]: "自定义词汇：正在保存…",
+    [CUSTOM_VOCABULARY_SYNC_STATUSES.SETUP_ERROR]: "自定义词汇：账号初始化失败。",
+    [CUSTOM_VOCABULARY_SYNC_STATUSES.SAVE_ERROR]: "自定义词汇：保存失败。",
+    [CUSTOM_VOCABULARY_SYNC_STATUSES.CONFLICT]: "自定义词汇已在其他设备更新。",
+    [CUSTOM_VOCABULARY_SYNC_STATUSES.UNAVAILABLE]: "自定义词汇：暂时无法连接。",
+    [CUSTOM_VOCABULARY_SYNC_STATUSES.GUEST]: "自定义词汇：保存在此设备。"
+  };
+  elements.accountCustomVocabularyStatus.textContent = messages[status.syncStatus] ?? messages.guest;
+  elements.accountCustomVocabularyStatus.dataset.cloudStatus = status.syncStatus;
+  elements.accountCustomVocabularyReload.hidden = status.source !== CUSTOM_VOCABULARY_SOURCES.CONFLICT;
+  elements.accountCustomVocabularyReload.disabled = status.operationInProgress;
+  elements.accountCustomVocabularySetupOpen.hidden = !status.migrationRequired ||
+    status.migrationKind === CUSTOM_VOCABULARY_MIGRATION_KINDS.EMPTY_GUEST;
+  customVocabularySetupDialogController?.update(status);
+}
+
+async function reloadCustomVocabularyAfterConflict() {
+  const result = await customVocabularyIntegration?.reloadAfterConflict();
+  if (result?.ok) {
+    setCategoryManagerNotice("已重新加载云端自定义词汇。", "success");
+  }
+}
+
 // Account restoration is optional and never blocks the local learning application.
 void initializeAuthentication();
 
 async function initializeAuthentication() {
   const authState = await authService.initialize();
-  await learningStateRuntime?.handleAuthState(authState);
-  if (!hasRenderedLearningState && learningStateRuntime) {
-    applyRuntimeLearningState(learningStateRuntime.getState());
-  }
+  await customVocabularyIntegration?.handleAuthState(authState);
   if (!emailConfirmationCallback.isCallback) return;
   try {
     await authDialogController.handleEmailConfirmationCallback(emailConfirmationCallback);
@@ -542,6 +694,13 @@ function exportCurrentVocabulary() {
 async function handleVocabularyImportSelection(event) {
   const file = event.target.files?.[0] ?? null;
   if (!file) {
+    return;
+  }
+
+  if (customVocabularyRuntime?.getStatus().source !== CUSTOM_VOCABULARY_SOURCES.GUEST_LOCAL) {
+    setCategoryManagerNotice("完整词库导入仅用于本机访客词库维护。", "error");
+    resetVocabularyImportInput(elements.vocabularyImportInput);
+    renderCategoryTreeManagerB3();
     return;
   }
 
@@ -603,6 +762,8 @@ function confirmVocabularyImport() {
     });
     currentVocabulary = result.vocabulary;
     report = result.validation;
+    guestVocabulary = JSON.parse(JSON.stringify(result.vocabulary));
+    guestOfficialCompatibility = vocabularyRepository.getOfficialCompatibility();
     appState = result.relatedState;
     persistenceError = "";
     pendingVocabularyImport = null;
@@ -636,15 +797,18 @@ function getVocabularyImportErrorMessage(error) {
   }[error?.code] ?? "词库数据不合法";
 }
 
-function replaceActiveQuestion(excludedWordKey = null) {
+function replaceActiveQuestion(excludedWordKey = null, options = {}) {
+  const persist = options.persist !== false;
+  const recordRoundEntry = options.recordRoundEntry !== false;
   const previousWordKey = excludedWordKey ?? appState.practice.activeQuestion?.wordKey ?? null;
-  const eligibleWordKeys = appState.rounds.current
+  const eligibleWordKeys = (appState.rounds.current
     ? getRoundEligibleWordKeys(
       appState.rounds.current,
       appState.learning,
       appState.practice.mode
     )
-    : getEligibleWordKeys(report.index);
+    : getEligibleWordKeys(report.index))
+    .filter((wordKey) => report.index.displayByWordKey.has(wordKey));
   const wordKey = selectPracticeWordKey({
     mode: appState.practice.mode,
     eligibleWordKeys,
@@ -656,7 +820,7 @@ function replaceActiveQuestion(excludedWordKey = null) {
   const question = wordKey ? createQuestion(report.index, { wordKey }) : null;
   let nextLearning = appState.learning;
   let nextRound = appState.rounds.current;
-  if (question && nextRound) {
+  if (question && nextRound && recordRoundEntry) {
     const shown = markRoundWordShown({
       round: nextRound,
       learning: nextLearning,
@@ -680,7 +844,7 @@ function replaceActiveQuestion(excludedWordKey = null) {
       current: nextRound
     }
   };
-  persistState();
+  if (persist) persistState();
 }
 
 function createActiveQuestion(question) {
@@ -2367,14 +2531,35 @@ function saveVocabularyCandidate(candidate, reportError = setCategoryManagerNoti
     return false;
   }
 
+  let result;
   try {
-    vocabularyRepository.save(candidate);
-    currentVocabulary = vocabularyRepository.getCurrentVocabulary();
-    report = vocabularyRepository.getCurrentValidation();
+    result = customVocabularyIntegration
+      ? customVocabularyIntegration.saveVocabularyCandidate(candidate)
+      : { ok: true, status: "saved-guest", saved: saveGuestVocabularyCandidate(candidate) };
   } catch {
-    reportError("词库保存失败，请检查浏览器存储权限。", "error");
+    reportError("词库保存失败，请稍后重试。", "error");
     return false;
   }
+  if (!result.ok) {
+    const message = result.status === "conflict"
+      ? "自定义词汇已在其他设备更新，请先重新加载云端词汇。"
+      : result.status === "not-writable"
+        ? "账号自定义词汇正在初始化或保存，请稍后再试。"
+        : "该词库修改无法安全保存。";
+    reportError(message, "error");
+    return false;
+  }
+
+  result.savePromise?.then((saveResult) => {
+    if (saveResult?.ok) return;
+    const status = customVocabularyRuntime?.getStatus();
+    const message = status?.source === CUSTOM_VOCABULARY_SOURCES.CONFLICT
+      ? "自定义词汇已在其他设备更新，请重新加载云端词汇。"
+      : "云端自定义词汇暂时保存失败，当前修改仍保留在本页面。";
+    reportError(message, "error");
+    if (isWordbookOpen) renderWordbook();
+    renderVocabularyManager();
+  });
 
   renderActiveQuestion();
   return true;

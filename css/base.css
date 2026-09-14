@@ -62,7 +62,8 @@ body { margin: 0; min-width: 0; overflow-x: hidden; background: var(--color-bg);
 body.modal-open { overflow: hidden; }
 body.vocabulary-card-open { overflow: hidden; }
 body.account-dialog-open,
-body.cloud-learning-setup-open { overflow: hidden; }
+body.cloud-learning-setup-open,
+body.custom-vocabulary-setup-open { overflow: hidden; }
 button, select, input { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
 [hidden] { display: none !important; }

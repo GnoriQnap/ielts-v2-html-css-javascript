@@ -60,6 +60,18 @@ export function createVocabularyRepository(options = {}) {
     return clonePlain(currentVocabulary);
   }
 
+  function replaceRuntimeVocabulary(vocabulary) {
+    const candidate = requireVocabularyData(vocabulary);
+    const validation = validator(candidate);
+    if (!validation.isValid) {
+      throw new TypeError(validation.errors[0]?.message ?? "词库数据不合法。");
+    }
+    currentVocabulary = clonePlain(candidate);
+    currentValidation = validation;
+    officialCompatibility = inspectOfficialCompatibility(currentVocabulary, fallback);
+    return clonePlain(currentVocabulary);
+  }
+
   return {
     load() {
       const cached = readVocabularyCache(storage, validator);
@@ -109,6 +121,10 @@ export function createVocabularyRepository(options = {}) {
     saveMaintenanceVocabulary(vocabulary) {
       return saveCurrentVocabulary(vocabulary);
     },
+
+    // Account Cloud vocabulary is composed in memory. This explicit runtime
+    // capability never writes the Guest vocabulary cache.
+    replaceRuntimeVocabulary,
 
     getCurrentVocabulary() {
       return currentVocabulary ? clonePlain(currentVocabulary) : null;

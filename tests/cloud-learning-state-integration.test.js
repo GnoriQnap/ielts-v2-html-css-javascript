@@ -20,12 +20,14 @@ test("only unsubmitted option selection uses cloud-deferred persistence", async 
   assert.equal((app.match(/PERSISTENCE_INTENTS\.CLOUD_DEFERRED/g) ?? []).length, 1);
 });
 
-test("account panel exposes only the lightweight cloud connection status", async () => {
+test("account panel exposes independent lightweight Learning and Custom Vocabulary status", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /id="account-cloud-status"/);
   assert.match(html, /id="account-cloud-reload"[^>]*hidden/);
-  assert.match(html, /app\.js\?v=10\.8b1b/);
+  assert.match(html, /app\.js\?v=10\.8d2/);
   assert.match(html, /当前学习进度保存在此设备/);
+  assert.match(html, /id="account-custom-vocabulary-status"/);
+  assert.match(html, /id="account-custom-vocabulary-reload"[^>]*hidden/);
 
   const app = await readFile(new URL("../js/app.js", import.meta.url), "utf8");
   assert.match(app, /学习进度已连接到账号/);
@@ -33,6 +35,7 @@ test("account panel exposes only the lightweight cloud connection status", async
   assert.match(app, /暂时无法连接云端学习进度/);
   assert.match(app, /此账号的学习进度已在另一台设备更新/);
   assert.match(app, /reloadCloudLearningStateAfterConflict/);
+  assert.match(app, /reloadCustomVocabularyAfterConflict/);
   assert.match(app, /accountCloudReload\.hidden\s*=\s*status\.syncStatus\s*!==\s*CLOUD_SYNC_STATUSES\.CONFLICT/);
 });
 

@@ -297,6 +297,19 @@ test("invalid Cloud data becomes unavailable without replacing or uploading Gues
   assert.equal(cloud.calls.update.length, 0);
 });
 
+test("authenticated load error without userId becomes unavailable instead of stale loading", async () => {
+  const cloud = createCloudRepository({
+    load: () => ({ ok: false, status: "error" })
+  });
+  const { runtime } = createRuntime({ vocabulary: guestVocabulary(), cloud });
+  const result = await runtime.initializeForAuthenticatedUser("user-a");
+
+  assert.equal(result.status, "error");
+  assert.equal(runtime.getStatus().source, CUSTOM_VOCABULARY_SOURCES.UNAVAILABLE);
+  assert.equal(runtime.getStatus().syncStatus, CUSTOM_VOCABULARY_SYNC_STATUSES.UNAVAILABLE);
+  assert.notEqual(runtime.getStatus().syncStatus, CUSTOM_VOCABULARY_SYNC_STATUSES.LOADING);
+});
+
 test("A snapshot cannot leak while B loads and stale A completion is ignored", async () => {
   const loadA = deferred();
   const loadB = deferred();
@@ -509,12 +522,13 @@ test("status and snapshots are clone-safe read-only views", async () => {
   assert.throws(() => { runtime.getStatus().source = "changed"; }, TypeError);
 });
 
-test("runtime remains infrastructure-only: app and migrations do not import or define it", () => {
+test("runtime integration remains outside Supabase migrations", () => {
   const appSource = readFileSync(new URL("../js/app.js", import.meta.url), "utf8");
   const migrationSource = readFileSync(new URL(
     "../supabase/migrations/003_user_custom_vocabularies.sql",
     import.meta.url
   ), "utf8");
-  assert.equal(appSource.includes("custom-vocabulary-runtime"), false);
+  assert.equal(appSource.includes("custom-vocabulary-runtime"), true);
+  assert.equal(appSource.includes("createCustomVocabularyIntegration"), true);
   assert.equal(migrationSource.includes("custom-vocabulary-runtime"), false);
 });
