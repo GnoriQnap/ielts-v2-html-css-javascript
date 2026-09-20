@@ -4,6 +4,7 @@ import { createDefaultAppState } from "./storage.js?v=8.4c1";
 
 export const LEARNING_STATE_SOURCES = Object.freeze({
   GUEST: "guest",
+  AUTHENTICATED_BLOCKED: "authenticated-blocked",
   AUTHENTICATED_CLOUD: "authenticated-cloud",
   PENDING_MIGRATION: "pending-migration"
 });
@@ -127,6 +128,7 @@ export function createLearningStateRuntime({
       currentUserId === userId &&
       loadingUserId === null &&
       [
+        LEARNING_STATE_SOURCES.AUTHENTICATED_BLOCKED,
         LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD,
         LEARNING_STATE_SOURCES.PENDING_MIGRATION
       ].includes(source)
@@ -137,7 +139,6 @@ export function createLearningStateRuntime({
       return loadingPromise;
     }
 
-    const wasShowingAccountState = source === LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD;
     const operationGeneration = ++generation;
     discardPendingCloudSave();
     pendingMigration = null;
@@ -149,15 +150,28 @@ export function createLearningStateRuntime({
     cloudRevision = null;
     conflictRemote = null;
     conflictReloadPromise = null;
-    source = LEARNING_STATE_SOURCES.GUEST;
-    if (wasShowingAccountState) {
-      currentState = preservedGuestState;
-    }
+    source = LEARNING_STATE_SOURCES.AUTHENTICATED_BLOCKED;
+    currentState = createBlockedAccountState();
     setSyncStatus(CLOUD_SYNC_STATUSES.LOADING);
-    if (wasShowingAccountState) notifyRuntimeStateChange();
+    notifyRuntimeStateChange();
 
     loadingPromise = (async () => {
-      const result = await cloudRepository.loadCloudLearningState();
+      let result;
+      try {
+        result = await cloudRepository.loadCloudLearningState();
+      } catch {
+        if (operationGeneration === generation && currentUserId === userId) {
+          loadingUserId = null;
+          loadingPromise = null;
+          source = LEARNING_STATE_SOURCES.AUTHENTICATED_BLOCKED;
+          pendingMigration = null;
+          cloudRowConfirmed = false;
+          cloudRevision = null;
+          setSyncStatus(CLOUD_SYNC_STATUSES.UNAVAILABLE);
+          notifyRuntimeStateChange();
+        }
+        return getStatus();
+      }
       if (operationGeneration !== generation || currentUserId !== userId) {
         return { ...getStatus(), stale: true };
       }
@@ -180,7 +194,6 @@ export function createLearningStateRuntime({
         source = LEARNING_STATE_SOURCES.PENDING_MIGRATION;
         cloudRowConfirmed = false;
         cloudRevision = null;
-        currentState = preservedGuestState;
         pendingMigration = {
           userId,
           generation: operationGeneration,
@@ -194,28 +207,14 @@ export function createLearningStateRuntime({
         return getStatus();
       }
 
-      source = LEARNING_STATE_SOURCES.GUEST;
+      source = LEARNING_STATE_SOURCES.AUTHENTICATED_BLOCKED;
       pendingMigration = null;
       cloudRowConfirmed = false;
       cloudRevision = null;
-      currentState = preservedGuestState;
       setSyncStatus(CLOUD_SYNC_STATUSES.UNAVAILABLE);
       notifyRuntimeStateChange();
       return getStatus();
-    })().catch(() => {
-      if (operationGeneration === generation && currentUserId === userId) {
-        loadingUserId = null;
-        loadingPromise = null;
-        source = LEARNING_STATE_SOURCES.GUEST;
-        pendingMigration = null;
-        cloudRowConfirmed = false;
-        cloudRevision = null;
-        currentState = preservedGuestState;
-        setSyncStatus(CLOUD_SYNC_STATUSES.UNAVAILABLE);
-        notifyRuntimeStateChange();
-      }
-      return getStatus();
-    });
+    })();
 
     return loadingPromise;
   }
@@ -243,12 +242,17 @@ export function createLearningStateRuntime({
 
   function persistState(nextState, options = {}) {
     const intent = normalizePersistenceIntent(options.intent);
-    currentState = nextState;
-    if (source !== LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD || !cloudRowConfirmed) {
+    if (source === LEARNING_STATE_SOURCES.GUEST) {
       preservedGuestState = saveGuestState(nextState);
       currentState = preservedGuestState;
       return currentState;
     }
+
+    if (source !== LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD || !cloudRowConfirmed) {
+      return currentState;
+    }
+
+    currentState = nextState;
 
     if (syncStatus === CLOUD_SYNC_STATUSES.CONFLICT) return currentState;
 
@@ -325,7 +329,7 @@ export function createLearningStateRuntime({
       source = LEARNING_STATE_SOURCES.PENDING_MIGRATION;
       cloudRowConfirmed = false;
       cloudRevision = null;
-      currentState = preservedGuestState;
+      currentState = createBlockedAccountState();
       pendingMigration = {
         userId: identity.userId,
         generation: identity.generation,
@@ -361,6 +365,10 @@ export function createLearningStateRuntime({
   function discardPendingCloudSave() {
     cloudPendingLatest = null;
     cloudRetryPaused = false;
+  }
+
+  function createBlockedAccountState() {
+    return normalizeRuntimeState(createDefaultState());
   }
 
   function saveGuestProgressToAccount() {

@@ -43,6 +43,7 @@ export function createAuthDialogController({
   let unsubscribeState = null;
   let confirmationTimer = null;
   let pendingEmail = pendingEmailStore.load();
+  const addedInertElements = new Set();
 
   function initialize() {
     if (initialized) return;
@@ -331,7 +332,17 @@ export function createAuthDialogController({
   }
 
   function setBackgroundInert(inert) {
-    for (const element of backgroundElements) element?.toggleAttribute?.("inert", inert);
+    if (inert) {
+      for (const element of backgroundElements) {
+        if (element && !element.hasAttribute?.("inert")) {
+          element.setAttribute?.("inert", "");
+          addedInertElements.add(element);
+        }
+      }
+      return;
+    }
+    for (const element of addedInertElements) element.removeAttribute?.("inert");
+    addedInertElements.clear();
   }
 
   function handleKeydown(event) {

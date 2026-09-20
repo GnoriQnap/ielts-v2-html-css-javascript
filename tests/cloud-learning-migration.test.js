@@ -103,8 +103,9 @@ test("empty guest automatically creates a default cloud state", async () => {
   assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD);
 });
 
-test("create failure preserves guest and remains retryable pending migration", async () => {
+test("create failure keeps Guest private and remains retryable pending migration", async () => {
   const guestState = meaningfulGuest();
+  const guestBefore = structuredClone(guestState);
   const fixture = createFixture({
     guestState,
     createResults: [{ ok: false, status: "error", error: { code: "unavailable" } }]
@@ -115,7 +116,9 @@ test("create failure preserves guest and remains retryable pending migration", a
   assert.equal(result.status, "error");
   assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.PENDING_MIGRATION);
   assert.equal(fixture.runtime.getStatus().syncStatus, CLOUD_SYNC_STATUSES.SETUP_ERROR);
-  assert.deepEqual(fixture.runtime.getState(), guestState);
+  assert.notEqual(fixture.runtime.getState(), guestState);
+  assert.deepEqual(fixture.runtime.getState(), createDefaultAppState());
+  assert.deepEqual(guestState, guestBefore);
   assert.deepEqual(fixture.savedGuestStates, []);
 });
 

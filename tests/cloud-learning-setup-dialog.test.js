@@ -26,6 +26,7 @@ test("close keeps pending migration, performs no cloud write, and account entry 
   assert.equal(fixture.overlay.hidden, true);
   assert.equal(fixture.body.classList.contains("cloud-learning-setup-open"), false);
   assert.equal(fixture.background.hasAttribute("inert"), false);
+  assert.equal(fixture.blockedLearningSurface.hasAttribute("inert"), true);
   assert.equal(fixture.calls.saveGuest, 0);
   assert.equal(fixture.calls.startFresh, 0);
   assert.equal(fixture.calls.createCloudLearningState, 0);
@@ -39,6 +40,10 @@ test("close keeps pending migration, performs no cloud write, and account entry 
   assert.equal(fixture.body.classList.contains("cloud-learning-setup-open"), true);
   assert.equal(fixture.calls.saveGuest, 0);
   assert.equal(fixture.calls.startFresh, 0);
+  fixture.documentRef.dispatch("keydown", { key: "Escape", preventDefault() {} });
+  assert.equal(fixture.overlay.hidden, true);
+  assert.equal(fixture.blockedLearningSurface.hasAttribute("inert"), true);
+  assert.equal(fixture.status.source, "pending-migration");
 });
 
 test("empty pending state does not ask before automatic creation", () => {
@@ -73,6 +78,21 @@ test("create failure stays retryable and displays only safe feedback", async () 
   assert.equal(fixture.saveGuest.disabled, false);
 });
 
+test("close and Escape are blocked while account creation is in flight", async () => {
+  const fixture = createFixture({ deferred: true });
+  fixture.controller.update(pendingStatus());
+  const submission = fixture.saveGuest.click();
+
+  assert.equal(fixture.close.disabled, true);
+  await fixture.close.click();
+  fixture.documentRef.dispatch("keydown", { key: "Escape", preventDefault() {} });
+  assert.equal(fixture.overlay.hidden, false);
+
+  fixture.finishDeferred();
+  await submission;
+  assert.equal(fixture.overlay.hidden, true);
+});
+
 test("mobile setup actions stack without changing desktop card width", async () => {
   const css = await readFile(new URL("../css/base.css", import.meta.url), "utf8");
   assert.match(css, /\.cloud-learning-setup-card\s*\{\s*width:\s*min\(100%,\s*480px\)/);
@@ -82,7 +102,7 @@ test("mobile setup actions stack without changing desktop card width", async () 
   assert.match(css, /\.account-dialog-close\s*\{[^}]*width:\s*40px;[^}]*height:\s*40px/);
 });
 
-function createFixture({ fail = false } = {}) {
+function createFixture({ fail = false, deferred = false } = {}) {
   const documentRef = new FakeDocument();
   const elements = {
     open: new FakeElement(documentRef),
@@ -96,17 +116,26 @@ function createFixture({ fail = false } = {}) {
   elements.overlay.hidden = true;
   const body = new FakeElement(documentRef);
   const background = new FakeElement(documentRef);
+  const blockedLearningSurface = new FakeElement(documentRef);
+  blockedLearningSurface.setAttribute("inert", "");
   const calls = {
     saveGuest: 0,
     startFresh: 0,
     createCloudLearningState: 0,
     updateCloudLearningState: 0
   };
+  let resolveDeferred;
+  const deferredGate = deferred
+    ? new Promise((resolve) => { resolveDeferred = resolve; })
+    : null;
   const fixture = {
     ...elements,
     body,
     background,
+    blockedLearningSurface,
+    documentRef,
     calls,
+    finishDeferred: () => resolveDeferred?.(),
     status: pendingStatus()
   };
   const runtimeActions = {
@@ -114,6 +143,7 @@ function createFixture({ fail = false } = {}) {
     async saveGuestProgressToAccount() {
       calls.saveGuest += 1;
       calls.createCloudLearningState += 1;
+      if (deferredGate) await deferredGate;
       if (fail) return { ok: false, status: "error" };
       fixture.status = cloudStatus();
       return { ok: true, status: "created" };
@@ -130,7 +160,7 @@ function createFixture({ fail = false } = {}) {
     runtimeActions,
     elements,
     body,
-    backgroundElements: [background],
+    backgroundElements: [background, blockedLearningSurface],
     documentRef
   });
   return fixture;
@@ -164,6 +194,7 @@ class FakeDocument {
   }
   addEventListener(type, listener) { this.listeners.set(type, listener); }
   removeEventListener(type) { this.listeners.delete(type); }
+  dispatch(type, event) { return this.listeners.get(type)?.(event); }
 }
 
 class FakeElement {

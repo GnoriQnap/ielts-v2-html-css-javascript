@@ -36,6 +36,18 @@ test("guest can repeatedly open and close without inert or scroll-lock residue",
   }
 });
 
+test("account dialog preserves background inert owned by Learning", () => {
+  const fixture = createFixture();
+  fixture.background.setAttribute("inert", "");
+  fixture.secondaryBackground.setAttribute("inert", "");
+
+  fixture.controller.open();
+  fixture.controller.close();
+
+  assert.equal(fixture.background.hasAttribute("inert"), true);
+  assert.equal(fixture.secondaryBackground.hasAttribute("inert"), true);
+});
+
 test("login and registration modes switch in the same dialog", () => {
   const fixture = createFixture();
   fixture.controller.open();
@@ -187,6 +199,7 @@ function createFixture(initialState = guestState(), options = {}) {
   const documentRef = new FakeDocument();
   const body = new FakeElement("body", documentRef);
   const background = new FakeElement("main", documentRef);
+  const secondaryBackground = new FakeElement("main", documentRef);
   const elements = {
     trigger: new FakeElement("button", documentRef),
     overlay: new FakeElement("div", documentRef),
@@ -219,14 +232,24 @@ function createFixture(initialState = guestState(), options = {}) {
     service,
     elements,
     body,
-    backgroundElements: [background],
+    backgroundElements: [background, secondaryBackground],
     documentRef,
     locationRef: { origin: "http://localhost:8000", pathname: "/" },
     pendingEmailStore: pendingStore,
     schedule(callback) { scheduled.push(callback); return scheduled.length; },
     cancelSchedule() {}
   });
-  return { ...elements, body, background, controller, documentRef, pendingStore, scheduled, service };
+  return {
+    ...elements,
+    body,
+    background,
+    secondaryBackground,
+    controller,
+    documentRef,
+    pendingStore,
+    scheduled,
+    service
+  };
 }
 
 function createFakeService(initialState, options = {}) {
@@ -320,6 +343,7 @@ class FakeElement {
     if (force) this.attributes.set(name, "");
     else this.attributes.delete(name);
   }
+  removeAttribute(name) { this.attributes.delete(name); }
   hasAttribute(name) { return this.attributes.has(name); }
   focus() {
     this.focused = true;
@@ -342,4 +366,5 @@ function assertClosed(fixture) {
   assert.equal(fixture.overlay.attributes.get("aria-hidden"), "true");
   assert.equal(fixture.body.classList.contains("account-dialog-open"), false);
   assert.equal(fixture.background.hasAttribute("inert"), false);
+  assert.equal(fixture.secondaryBackground.hasAttribute("inert"), false);
 }

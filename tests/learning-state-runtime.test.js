@@ -46,6 +46,118 @@ test("cloud found switches runtime without overwriting guest storage and logout 
   assert.deepEqual(fixture.savedGuestStates, []);
 });
 
+test("delayed cloud found transitions blocked Learning surfaces to authenticated ready", async () => {
+  let finishLoad;
+  const surfaces = {
+    practice: { inert: false, busy: false },
+    wordbook: { inert: false, busy: false }
+  };
+  const fixture = createFixture({
+    onRuntimeStateChange(_state, status) {
+      const blocked = status.source === LEARNING_STATE_SOURCES.AUTHENTICATED_BLOCKED ||
+        status.source === LEARNING_STATE_SOURCES.PENDING_MIGRATION;
+      surfaces.practice.inert = blocked;
+      surfaces.practice.busy = blocked && status.syncStatus === CLOUD_SYNC_STATUSES.LOADING;
+      surfaces.wordbook.inert = blocked;
+      surfaces.wordbook.busy = blocked && status.syncStatus === CLOUD_SYNC_STATUSES.LOADING;
+    }
+  });
+  fixture.cloud.setLoadOverride(new Promise((resolve) => { finishLoad = resolve; }));
+
+  const loading = authenticate(fixture, "a");
+  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.AUTHENTICATED_BLOCKED);
+  assert.equal(fixture.runtime.getStatus().syncStatus, CLOUD_SYNC_STATUSES.LOADING);
+  assert.deepEqual(surfaces, {
+    practice: { inert: true, busy: true },
+    wordbook: { inert: true, busy: true }
+  });
+
+  finishLoad({ ok: true, status: "found", state: learningState("cloud-a"), revision: 4 });
+  await loading;
+
+  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD);
+  assert.equal(fixture.runtime.getStatus().syncStatus, CLOUD_SYNC_STATUSES.CONNECTED);
+  assert.equal(fixture.runtime.getStatus().cloudRevision, 4);
+  assert.deepEqual(surfaces, {
+    practice: { inert: false, busy: false },
+    wordbook: { inert: false, busy: false }
+  });
+});
+
+test("delayed cloud rejection clears busy but keeps Learning surfaces inert until recovery", async () => {
+  let rejectLoad;
+  const surfaces = {
+    practice: { inert: false, busy: false },
+    wordbook: { inert: false, busy: false }
+  };
+  const fixture = createFixture({
+    rows: { a: learningState("cloud-a") },
+    onRuntimeStateChange(_state, status) {
+      const blocked = status.source === LEARNING_STATE_SOURCES.AUTHENTICATED_BLOCKED ||
+        status.source === LEARNING_STATE_SOURCES.PENDING_MIGRATION;
+      surfaces.practice.inert = blocked;
+      surfaces.practice.busy = blocked && status.syncStatus === CLOUD_SYNC_STATUSES.LOADING;
+      surfaces.wordbook.inert = blocked;
+      surfaces.wordbook.busy = blocked && status.syncStatus === CLOUD_SYNC_STATUSES.LOADING;
+    }
+  });
+  fixture.cloud.setLoadOverride(new Promise((_resolve, reject) => { rejectLoad = reject; }));
+
+  const loading = authenticate(fixture, "a");
+  assert.deepEqual(surfaces, {
+    practice: { inert: true, busy: true },
+    wordbook: { inert: true, busy: true }
+  });
+
+  rejectLoad(new Error("network unavailable"));
+  await loading;
+
+  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.AUTHENTICATED_BLOCKED);
+  assert.equal(fixture.runtime.getStatus().syncStatus, CLOUD_SYNC_STATUSES.UNAVAILABLE);
+  assert.deepEqual(surfaces, {
+    practice: { inert: true, busy: false },
+    wordbook: { inert: true, busy: false }
+  });
+  assert.equal(fixture.savedGuestStates.length, 0);
+
+  fixture.cloud.setLoadOverride(null);
+  await becomeGuest(fixture);
+  await authenticate(fixture, "a");
+
+  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD);
+  assert.equal(fixture.runtime.getStatus().syncStatus, CLOUD_SYNC_STATUSES.CONNECTED);
+  assert.deepEqual(surfaces, {
+    practice: { inert: false, busy: false },
+    wordbook: { inert: false, busy: false }
+  });
+  assert.equal(fixture.savedGuestStates.length, 0);
+});
+
+test("a connected consumer exception stays observable and is not relabeled unavailable", async () => {
+  const fixture = createFixture({
+    rows: { a: learningState("cloud-a") },
+    onRuntimeStateChange(_state, status) {
+      if (
+        status.source === LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD &&
+        status.syncStatus === CLOUD_SYNC_STATUSES.CONNECTED
+      ) {
+        throw new ReferenceError("consumer render failed");
+      }
+    }
+  });
+
+  await assert.rejects(authenticate(fixture, "a"), {
+    name: "ReferenceError",
+    message: "consumer render failed"
+  });
+
+  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD);
+  assert.equal(fixture.runtime.getStatus().syncStatus, CLOUD_SYNC_STATUSES.CONNECTED);
+  assert.equal(fixture.runtime.getStatus().cloudRowConfirmed, true);
+  assert.equal(fixture.runtime.getStatus().cloudRevision, 1);
+  assert.equal(fixture.savedGuestStates.length, 0);
+});
+
 test("switching between A and B never exposes the other account state", async () => {
   const fixture = createFixture({
     rows: { a: learningState("cloud-a"), b: learningState("cloud-b") }
@@ -61,28 +173,54 @@ test("switching between A and B never exposes the other account state", async ()
   assert.equal(fixture.runtime.getState().label, "cloud-a");
 });
 
-test("missing cloud row enters pending migration and keeps learning in guest storage", async () => {
+test("each unresolved authenticated identity receives a fresh blocked placeholder", async () => {
+  const fixture = createFixture({ guestState: meaningfulState("guest") });
+  await authenticate(fixture, "a");
+  const placeholderA = fixture.runtime.getState();
+  await authenticate(fixture, "b");
+  const placeholderB = fixture.runtime.getState();
+
+  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.PENDING_MIGRATION);
+  assert.notEqual(placeholderA, placeholderB);
+  assert.notEqual(placeholderB, fixture.guestState);
+  assert.equal(placeholderB.label, undefined);
+  assert.equal(fixture.savedGuestStates.length, 0);
+});
+
+test("missing cloud row keeps Guest private and blocks immediate persistence", async () => {
   const fixture = createFixture({ rows: {}, guestState: meaningfulState("guest") });
+  const guestBefore = structuredClone(fixture.guestState);
   await authenticate(fixture, "new-user");
 
   assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.PENDING_MIGRATION);
   assert.equal(fixture.runtime.getStatus().syncStatus, CLOUD_SYNC_STATUSES.PENDING_MIGRATION);
+  const placeholder = fixture.runtime.getState();
+  assert.notEqual(placeholder, fixture.guestState);
+  assert.equal(placeholder.label, undefined);
   const changed = learningState("pending-guest-change");
-  fixture.runtime.persistState(changed);
+  const retained = fixture.runtime.persistState(changed);
 
-  assert.equal(fixture.savedGuestStates.at(-1).label, "pending-guest-change");
+  assert.equal(retained, placeholder);
+  assert.deepEqual(fixture.guestState, guestBefore);
+  assert.equal(fixture.savedGuestStates.length, 0);
   assert.equal(fixture.cloud.calls.create, 0);
   assert.equal(fixture.cloud.calls.update.length, 0);
+  await becomeGuest(fixture);
+  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.GUEST);
+  assert.equal(fixture.runtime.getState(), fixture.guestState);
+  assert.deepEqual(fixture.runtime.getState(), guestBefore);
 });
 
-test("cloud-deferred intent still saves pending-migration state to guest storage", async () => {
+test("cloud-deferred intent is also blocked during pending migration", async () => {
   const fixture = createFixture({ rows: {}, guestState: meaningfulState("guest") });
   await authenticate(fixture, "new-user");
+  const placeholder = fixture.runtime.getState();
   const changed = learningState("pending-selection");
 
-  fixture.runtime.persistState(changed, { intent: PERSISTENCE_INTENTS.CLOUD_DEFERRED });
+  const retained = fixture.runtime.persistState(changed, { intent: PERSISTENCE_INTENTS.CLOUD_DEFERRED });
 
-  assert.equal(fixture.savedGuestStates.at(-1).label, "pending-selection");
+  assert.equal(retained, placeholder);
+  assert.equal(fixture.savedGuestStates.length, 0);
   assert.equal(fixture.cloud.calls.update.length, 0);
 });
 
@@ -308,7 +446,7 @@ test("two devices loading revision one cannot overwrite one another", async () =
   assert.equal(deviceB.getState().label, "remembered-101");
 });
 
-test("an update missing its row never inserts and returns to pending guest state", async () => {
+test("an update missing its row enters blocked pending migration without activating Guest", async () => {
   const fixture = createFixture({
     rows: { a: learningState("cloud-a") },
     updateResults: [{ ok: false, status: "not-found" }]
@@ -318,20 +456,62 @@ test("an update missing its row never inserts and returns to pending guest state
   await fixture.runtime.flushCloudSaves();
 
   assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.PENDING_MIGRATION);
-  assert.equal(fixture.runtime.getState().label, "guest");
+  assert.equal(fixture.runtime.getState().label, undefined);
+  assert.notEqual(fixture.runtime.getState(), fixture.guestState);
   assert.equal(fixture.runtime.getStatus().meaningfulGuestProgress, false);
+  assert.equal(fixture.savedGuestStates.length, 0);
   assert.equal(fixture.cloud.calls.create, 0);
   assert.equal(fixture.cloud.calls.update.length, 1);
 });
 
-test("cloud and network errors preserve guest state and do not write remotely", async () => {
+test("structured load errors retain authenticated ownership and reject persistence", async () => {
   const fixture = createFixture({ loadError: true });
+  const guestBefore = structuredClone(fixture.guestState);
   await authenticate(fixture, "a");
 
-  assert.equal(fixture.runtime.getState().label, "guest");
-  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.GUEST);
+  const placeholder = fixture.runtime.getState();
+  assert.equal(placeholder.label, undefined);
+  assert.notEqual(placeholder, fixture.guestState);
+  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.AUTHENTICATED_BLOCKED);
   assert.equal(fixture.runtime.getStatus().syncStatus, CLOUD_SYNC_STATUSES.UNAVAILABLE);
+  assert.equal(fixture.runtime.persistState(learningState("rejected")), placeholder);
   assert.equal(fixture.cloud.calls.update.length, 0);
+  assert.equal(fixture.savedGuestStates.length, 0);
+  assert.deepEqual(fixture.guestState, guestBefore);
+  await becomeGuest(fixture);
+  assert.equal(fixture.runtime.getState(), fixture.guestState);
+  assert.deepEqual(fixture.runtime.getState(), guestBefore);
+});
+
+test("thrown load errors retain authenticated ownership and reject persistence", async () => {
+  const fixture = createFixture({ loadThrows: true });
+  const guestBefore = structuredClone(fixture.guestState);
+  await authenticate(fixture, "a");
+
+  const placeholder = fixture.runtime.getState();
+  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.AUTHENTICATED_BLOCKED);
+  assert.equal(fixture.runtime.getStatus().syncStatus, CLOUD_SYNC_STATUSES.UNAVAILABLE);
+  assert.equal(fixture.runtime.persistState(learningState("rejected")), placeholder);
+  assert.equal(fixture.savedGuestStates.length, 0);
+  assert.deepEqual(fixture.guestState, guestBefore);
+});
+
+test("account vocabulary plus Learning failure never normalizes or activates Guest Learning", async () => {
+  const normalizedLabels = [];
+  const fixture = createFixture({
+    guestState: meaningfulState("guest-custom-learning"),
+    loadError: true,
+    normalizeRuntimeState(state) {
+      normalizedLabels.push(state.label ?? "account-placeholder");
+      return structuredClone(state);
+    }
+  });
+
+  await authenticate(fixture, "a");
+
+  assert.deepEqual(normalizedLabels, ["account-placeholder"]);
+  assert.equal(fixture.runtimeChanges.some(({ state }) => state.label === "guest-custom-learning"), false);
+  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.AUTHENTICATED_BLOCKED);
   assert.equal(fixture.savedGuestStates.length, 0);
 });
 
@@ -342,7 +522,7 @@ test("session restore uses the same found and not-found boundaries", async () =>
 
   const missing = createFixture({ rows: {}, guestState: meaningfulState("guest") });
   await authenticate(missing, "a");
-  assert.equal(missing.runtime.getState().label, "guest");
+  assert.equal(missing.runtime.getState().label, undefined);
   assert.equal(missing.runtime.getStatus().source, LEARNING_STATE_SOURCES.PENDING_MIGRATION);
 });
 
@@ -400,22 +580,40 @@ test("generation change discards the old identity's pending snapshot", async () 
   assert.equal(fixture.runtime.getState().label, "cloud-b");
 });
 
-test("switching identities restores guest before the next cloud load can finish", async () => {
+test("switching identities uses a fresh blocked placeholder until the next cloud load finishes", async () => {
   let finishLoad;
   const fixture = createFixture({ rows: { a: learningState("cloud-a") } });
   await authenticate(fixture, "a");
   fixture.cloud.setLoadOverride(new Promise((resolve) => { finishLoad = resolve; }));
   const switching = authenticate(fixture, "b");
 
-  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.GUEST);
-  assert.equal(fixture.runtime.getState().label, "guest");
-  fixture.runtime.persistState(learningState("guest-during-switch"));
-  assert.equal(fixture.savedGuestStates.at(-1).label, "guest-during-switch");
+  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.AUTHENTICATED_BLOCKED);
+  const placeholder = fixture.runtime.getState();
+  assert.equal(placeholder.label, undefined);
+  assert.notEqual(placeholder, fixture.guestState);
+  assert.equal(fixture.runtime.persistState(learningState("rejected-during-switch")), placeholder);
+  assert.equal(fixture.savedGuestStates.length, 0);
   assert.equal(fixture.cloud.calls.update.length, 0);
 
   finishLoad({ ok: true, status: "found", state: learningState("cloud-b"), revision: 1 });
   await switching;
   assert.equal(fixture.runtime.getState().label, "cloud-b");
+});
+
+test("a late authenticated load cannot replace Guest after logout", async () => {
+  let finishLoad;
+  const fixture = createFixture();
+  fixture.cloud.setLoadOverride(new Promise((resolve) => { finishLoad = resolve; }));
+  const loading = authenticate(fixture, "a");
+  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.AUTHENTICATED_BLOCKED);
+
+  await becomeGuest(fixture);
+  finishLoad({ ok: true, status: "found", state: learningState("late-a"), revision: 1 });
+  await loading;
+
+  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.GUEST);
+  assert.equal(fixture.runtime.getState(), fixture.guestState);
+  assert.equal(fixture.runtime.getState().label, "guest");
 });
 
 test("logout while a save is pending cannot replace or persist over guest state", async () => {
@@ -451,18 +649,20 @@ function createFixture(options = {}) {
       savedGuestStates.push(state);
       return state;
     },
-    normalizeRuntimeState: (state) => structuredClone(state),
+    normalizeRuntimeState: options.normalizeRuntimeState ?? ((state) => structuredClone(state)),
     onRuntimeStateChange(state, status) {
       runtimeChanges.push({ state, status });
+      options.onRuntimeStateChange?.(state, status);
     },
     onStatusChange(status) {
       statusChanges.push(status);
+      options.onStatusChange?.(status);
     }
   });
   return { cloud, guestState, runtime, runtimeChanges, savedGuestStates, statusChanges };
 }
 
-function createCloudRepositoryMock({ rows = {}, loadError = false, updateResults = [] } = {}) {
+function createCloudRepositoryMock({ rows = {}, loadError = false, loadThrows = false, updateResults = [] } = {}) {
   let currentUserId = null;
   let loadOverride = null;
   const revisions = Object.fromEntries(Object.keys(rows).map((userId) => [userId, 1]));
@@ -474,6 +674,7 @@ function createCloudRepositoryMock({ rows = {}, loadError = false, updateResults
     repository: {
       async loadCloudLearningState() {
         calls.load.push(currentUserId);
+        if (loadThrows) throw new Error("network unavailable");
         if (loadOverride) {
           const result = await loadOverride;
           loadOverride = null;

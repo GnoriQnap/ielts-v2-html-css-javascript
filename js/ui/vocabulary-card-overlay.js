@@ -11,6 +11,7 @@ export function createVocabularyCardOverlayController({
 
   let returnFocusElement = null;
   let isOpen = false;
+  const addedInertElements = new Set();
 
   function open(card, options = {}) {
     requireElement(card, "Vocabulary Card");
@@ -77,9 +78,17 @@ export function createVocabularyCardOverlayController({
   }
 
   function setBackgroundInert(inert) {
-    for (const element of backgroundElements) {
-      element?.toggleAttribute?.("inert", inert);
+    if (inert) {
+      for (const element of backgroundElements) {
+        if (element && !element.hasAttribute?.("inert")) {
+          element.setAttribute?.("inert", "");
+          addedInertElements.add(element);
+        }
+      }
+      return;
     }
+    for (const element of addedInertElements) element.removeAttribute?.("inert");
+    addedInertElements.clear();
   }
 
   documentRef?.addEventListener?.("keydown", handleKeydown);

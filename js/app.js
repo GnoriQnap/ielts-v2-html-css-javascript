@@ -78,7 +78,7 @@ import {
 import { createVocabularyCard } from "./ui/vocabulary-card.js?v=8.4c";
 import {
   createVocabularyCardOverlayController
-} from "./ui/vocabulary-card-overlay.js?v=8.3.1";
+} from "./ui/vocabulary-card-overlay.js?v=10.9b5";
 import { createAuthService } from "./core/auth-service.js?v=10.2a";
 import { hasPersistedSupabaseSession } from "./core/supabase-client.js?v=10.7c";
 import { createCloudLearningStateRepository } from "./core/cloud-learning-state-repository.js?v=10.6b2";
@@ -86,8 +86,9 @@ import { createCloudCustomVocabularyRepository } from "./core/cloud-custom-vocab
 import {
   CLOUD_SYNC_STATUSES,
   createLearningStateRuntime,
+  LEARNING_STATE_SOURCES,
   PERSISTENCE_INTENTS
-} from "./core/learning-state-runtime.js?v=10.7b";
+} from "./core/learning-state-runtime.js?v=10.9b5";
 import {
   CUSTOM_VOCABULARY_CREATE_ACTIONS,
   CUSTOM_VOCABULARY_MIGRATION_KINDS,
@@ -104,13 +105,14 @@ import {
   createPendingSignupEmailStore,
   inspectEmailConfirmationCallback
 } from "./core/auth-confirmation.js?v=10.2a";
-import { createAuthDialogController } from "./ui/auth-dialog.js?v=10.2a";
-import { createCloudLearningSetupDialog } from "./ui/cloud-learning-setup-dialog.js?v=10.7b";
+import { createAuthDialogController } from "./ui/auth-dialog.js?v=10.9b5";
+import { createCloudLearningSetupDialog } from "./ui/cloud-learning-setup-dialog.js?v=10.9b5";
 import { createCustomVocabularySetupDialog } from "./ui/custom-vocabulary-setup-dialog.js?v=10.8d2";
 import {
   createMainNavigationState,
   MAIN_VIEWS
 } from "./ui/main-navigation-state.js?v=10.7c";
+import { shouldLearningSurfaceBeInert } from "./ui/learning-surface-interactivity.js?v=10.9b5";
 
 const vocabularyRepository = createVocabularyRepository({
   fallbackVocabulary: defaultVocabularyData,
@@ -265,6 +267,8 @@ let isAbandonConfirmationOpen = false;
 let isWordbookOpen = false;
 let currentMainView = MAIN_VIEWS.PRACTICE;
 let hasRenderedLearningState = false;
+let learningSurfaceBlocked = false;
+let learningBlockedMessage = "正在加载账号学习进度…";
 let wordbookFilter = WORDBOOK_FILTERS.ALL;
 let wordbookQuery = "";
 let wordbookNotice = "";
@@ -300,9 +304,12 @@ const authService = createAuthService();
 const pendingSignupEmailStore = createPendingSignupEmailStore();
 const emailConfirmationCallback = inspectEmailConfirmationCallback(window.location.href);
 const shouldHoldInitialLearningState = hasPersistedSupabaseSession();
+learningSurfaceBlocked = shouldHoldInitialLearningState;
 if (shouldHoldInitialLearningState) {
   elements.practiceMain.inert = true;
   elements.practiceMain.setAttribute("aria-busy", "true");
+  elements.wordbookMain.inert = true;
+  elements.wordbookMain.setAttribute("aria-busy", "true");
 }
 const authDialogController = createAuthDialogController({
   service: authService,
@@ -520,7 +527,15 @@ function normalizeStateForCurrentVocabulary(candidate) {
   });
 }
 
-function applyRuntimeLearningState(nextState) {
+function applyRuntimeLearningState(nextState, status) {
+  if (isAuthenticatedLearningBlocked(status)) {
+    appState = nextState;
+    dismissedCompletionRoundId = null;
+    completionWasOpen = false;
+    renderBlockedLearningState(status);
+    return;
+  }
+
   appState = normalizeStateForCurrentVocabulary(nextState);
   dismissedCompletionRoundId = appState.rounds.lastCompletedSummary?.roundId ?? null;
   completionWasOpen = false;
@@ -557,13 +572,84 @@ function renderInitialLearningState() {
 }
 
 function markLearningSurfaceReady() {
+  learningSurfaceBlocked = false;
+  elements.reviewRankingEmpty.textContent = "暂无待强化词，继续保持。";
+  elements.wordbookEmpty.textContent = "没有找到匹配的词条。";
+  elements.wordbookNotice.textContent = wordbookNotice;
   elements.practiceMain.inert = false;
   elements.practiceMain.removeAttribute("aria-busy");
+  elements.wordbookMain.inert = false;
+  elements.wordbookMain.removeAttribute("aria-busy");
 }
 
 function holdLearningSurface() {
+  learningSurfaceBlocked = true;
+  learningBlockedMessage = "正在加载账号学习进度…";
   elements.practiceMain.inert = true;
   elements.practiceMain.setAttribute("aria-busy", "true");
+  elements.wordbookMain.inert = true;
+  elements.wordbookMain.setAttribute("aria-busy", "true");
+}
+
+function isAuthenticatedLearningBlocked(status) {
+  return status?.source === LEARNING_STATE_SOURCES.AUTHENTICATED_BLOCKED ||
+    status?.source === LEARNING_STATE_SOURCES.PENDING_MIGRATION;
+}
+
+function renderBlockedLearningState(status) {
+  learningSurfaceBlocked = true;
+  learningBlockedMessage = status.syncStatus === CLOUD_SYNC_STATUSES.LOADING
+    ? "正在加载账号学习进度…"
+    : status.source === LEARNING_STATE_SOURCES.PENDING_MIGRATION
+      ? "请先设置账号学习进度。"
+      : "账号学习进度暂时无法连接，请刷新页面重试或退出账号。";
+
+  elements.practiceMain.inert = true;
+  elements.practiceMain.toggleAttribute(
+    "aria-busy",
+    status.syncStatus === CLOUD_SYNC_STATUSES.LOADING
+  );
+  elements.wordbookMain.inert = true;
+  elements.wordbookMain.toggleAttribute(
+    "aria-busy",
+    status.syncStatus === CLOUD_SYNC_STATUSES.LOADING
+  );
+  elements.completionModal.hidden = true;
+  elements.abandonConfirmModal.hidden = true;
+  elements.type.textContent = "账号学习进度";
+  elements.word.textContent = learningBlockedMessage;
+  elements.prompt.textContent = status.source === LEARNING_STATE_SOURCES.PENDING_MIGRATION
+    ? "请在设置窗口中选择“保存到账号”或“从零开始”。"
+    : status.syncStatus === CLOUD_SYNC_STATUSES.UNAVAILABLE
+      ? "访客学习记录仍安全保留在此设备。"
+      : "正在确认当前账号的学习数据。";
+  elements.prompt.classList.remove("prompt-multiple");
+  elements.wordStatus.textContent = "";
+  elements.wordStatus.removeAttribute("data-status");
+  elements.options.replaceChildren();
+  elements.options.hidden = true;
+  elements.empty.hidden = true;
+  elements.feedback.textContent = "";
+  elements.submit.hidden = true;
+  elements.decisions.hidden = true;
+  elements.next.hidden = true;
+  elements.viewQuestionDetails.hidden = true;
+  elements.reviewCountStat.textContent = "—";
+  elements.reviewRanking.replaceChildren();
+  elements.reviewRanking.hidden = true;
+  elements.reviewRankingEmpty.hidden = false;
+  elements.reviewRankingEmpty.textContent = "账号学习进度尚未就绪。";
+  wordbookDataCache.clear();
+  renderViewFromLocation();
+}
+
+function renderBlockedWordbook() {
+  elements.wordbookList.replaceChildren();
+  elements.wordbookList.hidden = true;
+  elements.wordbookEmpty.hidden = false;
+  elements.wordbookEmpty.textContent = learningBlockedMessage;
+  elements.wordbookResultCount.textContent = "账号学习进度尚未就绪";
+  elements.wordbookNotice.textContent = "访客学习记录不会在账号模式下被读取或修改。";
 }
 
 function saveGuestVocabularyCandidate(candidate) {
@@ -1364,9 +1450,13 @@ function renderRoundControls() {
   elements.completionModal.hidden = !showCompletion;
   elements.abandonConfirmModal.hidden = !isAbandonConfirmationOpen;
   const isModalOpen = showCompletion || isAbandonConfirmationOpen;
+  const isLearningSurfaceInert = shouldLearningSurfaceBeInert({
+    learningSurfaceBlocked,
+    modalOpen: isModalOpen
+  });
   elements.siteHeader.toggleAttribute("inert", isModalOpen);
-  elements.practiceMain.toggleAttribute("inert", isModalOpen);
-  elements.wordbookMain.toggleAttribute("inert", isModalOpen);
+  elements.practiceMain.toggleAttribute("inert", isLearningSurfaceInert);
+  elements.wordbookMain.toggleAttribute("inert", isLearningSurfaceInert);
   elements.vocabularyManagerMain.toggleAttribute("inert", isModalOpen);
   if (isModalOpen) {
     elements.siteHeader.setAttribute("aria-hidden", "true");
@@ -2656,6 +2746,11 @@ function handleWordbookFilter(event) {
 }
 
 function renderWordbook() {
+  if (learningSurfaceBlocked) {
+    renderBlockedWordbook();
+    return;
+  }
+
   const { entries, categoryTree } = getWordbookData();
   const hasSearchQuery = Boolean(wordbookQuery.trim());
   const isCategoryTree = wordbookFilter === WORDBOOK_FILTERS.ALL && !hasSearchQuery;

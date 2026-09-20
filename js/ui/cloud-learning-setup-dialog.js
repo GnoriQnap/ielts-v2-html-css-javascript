@@ -1,7 +1,7 @@
 import {
   CLOUD_SYNC_STATUSES,
   LEARNING_STATE_SOURCES
-} from "../core/learning-state-runtime.js?v=10.7b";
+} from "../core/learning-state-runtime.js?v=10.9b5";
 
 export function createCloudLearningSetupDialog({
   runtimeActions,
@@ -17,7 +17,7 @@ export function createCloudLearningSetupDialog({
   const addedInertElements = new Set();
 
   elements.open.addEventListener("click", open);
-  elements.close.addEventListener("click", close);
+  elements.close.addEventListener("click", requestClose);
   elements.saveGuest.addEventListener("click", () => submit("save-guest"));
   elements.startFresh.addEventListener("click", () => submit("start-fresh"));
   documentRef?.addEventListener?.("keydown", handleKeydown);
@@ -26,6 +26,7 @@ export function createCloudLearningSetupDialog({
     const isPending = status.source === LEARNING_STATE_SOURCES.PENDING_MIGRATION;
     elements.open.hidden = !isPending;
     elements.open.disabled = status.migrationInProgress;
+    elements.close.disabled = status.migrationInProgress;
     elements.saveGuest.disabled = status.migrationInProgress;
     elements.startFresh.disabled = status.migrationInProgress;
 
@@ -74,9 +75,15 @@ export function createCloudLearningSetupDialog({
     }
   }
 
+  function requestClose() {
+    if (isSubmitting) return;
+    close();
+  }
+
   async function submit(action) {
     if (isSubmitting) return;
     isSubmitting = true;
+    elements.close.disabled = true;
     elements.saveGuest.disabled = true;
     elements.startFresh.disabled = true;
     elements.feedback.textContent = "";
@@ -91,6 +98,7 @@ export function createCloudLearningSetupDialog({
     }
     isSubmitting = false;
     const status = runtimeActions.getStatus();
+    elements.close.disabled = status.migrationInProgress;
     elements.saveGuest.disabled = status.migrationInProgress;
     elements.startFresh.disabled = status.migrationInProgress;
     if (status.source === LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD) {
@@ -120,7 +128,7 @@ export function createCloudLearningSetupDialog({
   function handleKeydown(event) {
     if (isOpen && event.key === "Escape" && !isSubmitting) {
       event.preventDefault?.();
-      close();
+      requestClose();
     }
   }
 
@@ -129,5 +137,5 @@ export function createCloudLearningSetupDialog({
     documentRef?.removeEventListener?.("keydown", handleKeydown);
   }
 
-  return Object.freeze({ close, destroy, isOpen: () => isOpen, open, update });
+  return Object.freeze({ close: requestClose, destroy, isOpen: () => isOpen, open, update });
 }

@@ -43,6 +43,18 @@ test("opening and closing synchronizes hidden, aria, classes, inert, and focus",
   assert.equal(fixture.trigger.focused, true);
 });
 
+test("closing the card preserves background inert owned by Learning", () => {
+  const fixture = createFixture();
+  fixture.background.setAttribute("inert", "");
+  fixture.secondaryBackground.setAttribute("inert", "");
+
+  fixture.controller.open(createCard(fixture.documentRef, fixture.controller.close));
+  fixture.controller.close();
+
+  assert.equal(fixture.background.hasAttribute("inert"), true);
+  assert.equal(fixture.secondaryBackground.hasAttribute("inert"), true);
+});
+
 test("the footer close action releases the overlay", () => {
   const fixture = createFixture();
   const card = createCard(fixture.documentRef, fixture.controller.close);
@@ -104,15 +116,25 @@ function createFixture() {
   const host = new FakeElement("div");
   const body = new FakeElement("body");
   const background = new FakeElement("main");
+  const secondaryBackground = new FakeElement("main");
   const trigger = new FakeElement("button");
   const controller = createVocabularyCardOverlayController({
     overlay,
     host,
     body,
-    backgroundElements: [background],
+    backgroundElements: [background, secondaryBackground],
     documentRef
   });
-  return { documentRef, overlay, host, body, background, trigger, controller };
+  return {
+    documentRef,
+    overlay,
+    host,
+    body,
+    background,
+    secondaryBackground,
+    trigger,
+    controller
+  };
 }
 
 function createCard(documentRef, onClose) {
@@ -130,6 +152,7 @@ function assertClosed(fixture) {
   assert.equal(fixture.overlay.classList.contains("is-open"), false);
   assert.equal(fixture.body.classList.contains("vocabulary-card-open"), false);
   assert.equal(fixture.background.hasAttribute("inert"), false);
+  assert.equal(fixture.secondaryBackground.hasAttribute("inert"), false);
   assert.equal(fixture.host.children.length, 0);
 }
 
@@ -166,6 +189,7 @@ class FakeElement {
     if (force) this.attributes.set(name, "");
     else this.attributes.delete(name);
   }
+  removeAttribute(name) { this.attributes.delete(name); }
   hasAttribute(name) { return this.attributes.has(name); }
   replaceChildren(...children) {
     if (this.failNextReplace) {
