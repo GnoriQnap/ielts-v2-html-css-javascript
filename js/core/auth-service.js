@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "./supabase-client.js?v=10.1";
+import { getSupabaseClient } from "./supabase-client.js?v=10.9e2";
 
 export const AUTH_STATUSES = Object.freeze({
   LOADING: "loading",

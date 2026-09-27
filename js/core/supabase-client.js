@@ -4,7 +4,7 @@ import {
 } from "../config/supabase-config.js";
 
 export const SUPABASE_ESM_URL =
-  "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+  "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm";
 
 export const SUPABASE_BROWSER_OPTIONS = Object.freeze({
   auth: Object.freeze({

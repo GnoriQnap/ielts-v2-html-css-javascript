@@ -24,7 +24,7 @@ test("account panel exposes independent lightweight Learning and Custom Vocabula
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
   assert.match(html, /id="account-cloud-status"/);
   assert.match(html, /id="account-cloud-reload"[^>]*hidden/);
-  assert.match(html, /app\.js\?v=10\.9d3c/);
+  assert.match(html, /app\.js\?v=10\.9e2/);
   assert.match(html, /当前学习进度保存在此设备/);
   assert.match(html, /id="account-custom-vocabulary-status"/);
   assert.match(html, /id="account-custom-vocabulary-reload"[^>]*hidden/);
@@ -67,14 +67,15 @@ test("Stage 10.9D module graph loads D-3C setup deferral through fresh importer 
   const recoveryPatchVersion = "10.9d3a";
   const patchVersion = "10.9d3b1";
   const setupDeferralVersion = "10.9d3c";
+  const entryVersion = "10.9e2";
   const changedAppImports = [
-    "./core/auth-service.js",
     "./core/auth-confirmation.js",
     "./core/learning-state-runtime.js",
     "./core/custom-vocabulary-integration.js"
   ];
 
-  assert.match(html, new RegExp(`src="\\./js/app\\.js\\?v=${setupDeferralVersion}"`));
+  assert.match(html, new RegExp(`src="\\./js/app\\.js\\?v=${entryVersion}"`));
+  assert.match(app, new RegExp(`\\./core/auth-service\\.js\\?v=${entryVersion}`));
   for (const modulePath of changedAppImports) {
     const escapedPath = modulePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     assert.match(app, new RegExp(`${escapedPath}\\?v=${version}`));

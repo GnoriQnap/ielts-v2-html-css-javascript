@@ -1,6 +1,6 @@
 import { vocabularyData } from "../data/vocabulary.js";
 import { validateCustomVocabularySnapshot } from "./custom-vocabulary-snapshot.js";
-import { getSupabaseClient } from "./supabase-client.js?v=10.1";
+import { getSupabaseClient } from "./supabase-client.js?v=10.9e2";
 
 export const CLOUD_CUSTOM_VOCABULARY_TABLE = "user_custom_vocabularies";
 

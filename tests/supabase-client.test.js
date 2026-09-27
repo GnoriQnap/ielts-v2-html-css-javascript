@@ -6,11 +6,52 @@ import {
   createSupabaseClientProvider,
   hasPersistedSupabaseSession,
   SUPABASE_BROWSER_OPTIONS,
+  SUPABASE_ESM_URL,
   validateSupabaseBrowserConfig
 } from "../js/core/supabase-client.js";
 
 const VALID_URL = "https://project-ref.supabase.co";
 const VALID_KEY = "sb_publishable_browser_test_key";
+
+test("Supabase browser ESM dependency is fully pinned to the approved patch version", () => {
+  assert.equal(
+    SUPABASE_ESM_URL,
+    "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm"
+  );
+  assert.match(
+    SUPABASE_ESM_URL,
+    /^https:\/\/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js@\d+\.\d+\.\d+\/\+esm$/
+  );
+  assert.doesNotMatch(SUPABASE_ESM_URL, /@2\/\+esm|@latest\/|@[~^*]|@[0-9]+\.x(?:\.x)?\//);
+});
+
+test("Supabase-related browser module graph uses the Stage 10.9E cache identity", async () => {
+  const [html, app, authService, learningRepository, customRepository] = await Promise.all([
+    readFile(new URL("../index.html", import.meta.url), "utf8"),
+    readFile(new URL("../js/app.js", import.meta.url), "utf8"),
+    readFile(new URL("../js/core/auth-service.js", import.meta.url), "utf8"),
+    readFile(new URL("../js/core/cloud-learning-state-repository.js", import.meta.url), "utf8"),
+    readFile(new URL("../js/core/cloud-custom-vocabulary-repository.js", import.meta.url), "utf8")
+  ]);
+  const version = "10.9e2";
+
+  assert.match(html, new RegExp(`src="\\./js/app\\.js\\?v=${version}"`));
+  for (const modulePath of [
+    "./core/auth-service.js",
+    "./core/supabase-client.js",
+    "./core/cloud-learning-state-repository.js",
+    "./core/cloud-custom-vocabulary-repository.js"
+  ]) {
+    const escapedPath = modulePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    assert.match(app, new RegExp(`${escapedPath}\\?v=${version}`));
+  }
+  for (const importer of [authService, learningRepository, customRepository]) {
+    assert.match(importer, new RegExp(`\\./supabase-client\\.js\\?v=${version}`));
+  }
+
+  const relevantGraph = [app, authService, learningRepository, customRepository].join("\n");
+  assert.doesNotMatch(relevantGraph, /supabase-client\.js\?v=(?:10\.1|10\.7c)/);
+});
 
 test("startup can distinguish a definite Guest from a persisted Supabase session without reading its contents", () => {
   const requestedKeys = [];

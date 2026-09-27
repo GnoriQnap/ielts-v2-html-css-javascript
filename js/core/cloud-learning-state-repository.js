@@ -3,7 +3,7 @@ import {
   normalizeAppState,
   SCHEMA_VERSION
 } from "./storage.js";
-import { getSupabaseClient } from "./supabase-client.js?v=10.1";
+import { getSupabaseClient } from "./supabase-client.js?v=10.9e2";
 
 export const CLOUD_LEARNING_STATE_TABLE = "user_learning_states";
 

@@ -79,10 +79,10 @@ import { createVocabularyCard } from "./ui/vocabulary-card.js?v=8.4c";
 import {
   createVocabularyCardOverlayController
 } from "./ui/vocabulary-card-overlay.js?v=10.9b5";
-import { createAuthService } from "./core/auth-service.js?v=10.9d3";
-import { hasPersistedSupabaseSession } from "./core/supabase-client.js?v=10.7c";
-import { createCloudLearningStateRepository } from "./core/cloud-learning-state-repository.js?v=10.6b2";
-import { createCloudCustomVocabularyRepository } from "./core/cloud-custom-vocabulary-repository.js?v=10.8c";
+import { createAuthService } from "./core/auth-service.js?v=10.9e2";
+import { hasPersistedSupabaseSession } from "./core/supabase-client.js?v=10.9e2";
+import { createCloudLearningStateRepository } from "./core/cloud-learning-state-repository.js?v=10.9e2";
+import { createCloudCustomVocabularyRepository } from "./core/cloud-custom-vocabulary-repository.js?v=10.9e2";
 import {
   CLOUD_SYNC_STATUSES,
   createLearningStateRuntime,
