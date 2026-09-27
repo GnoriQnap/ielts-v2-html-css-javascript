@@ -1,0 +1,42 @@
+# Private/local development artifacts
+
+work/
+
+# macOS
+
+.DS_Store
+
+# Environment files
+
+.env
+.env.*
+!.env.example
+
+# Editors
+
+.vscode/
+.idea/
+
+# Logs and temporary files
+
+*.log
+*.tmp
+*.swp
+*.bak
+*~
+
+# Database dumps / backups
+
+*.dump
+*.backup
+*.sql.gz
+
+# Private keys
+
+*.pem
+*.key
+
+# Generated dependencies / coverage
+
+node_modules/
+coverage/
