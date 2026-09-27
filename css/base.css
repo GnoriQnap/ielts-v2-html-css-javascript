@@ -343,6 +343,7 @@ h1, h2, p { margin-top: 0; }
 }
 .account-form { display: grid; gap: 9px; }
 .account-form label { color: var(--color-text-secondary); font-size: 14px; font-weight: 750; }
+.account-field-row { display: grid; gap: 9px; }
 .account-form input {
   width: 100%;
   min-height: 46px;
@@ -403,6 +404,7 @@ h1, h2, p { margin-top: 0; }
 }
 .account-confirmation-state .account-email-display { margin-bottom: 12px; }
 .account-confirmation-state .account-local-note { margin-bottom: 20px; }
+.account-confirmation-state #account-pending-resend { margin-bottom: 9px; }
 .account-confirmation-message {
   margin: 4px 0 20px;
   color: var(--color-text-secondary);

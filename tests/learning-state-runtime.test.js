@@ -46,6 +46,39 @@ test("cloud found switches runtime without overwriting guest storage and logout 
   assert.deepEqual(fixture.savedGuestStates, []);
 });
 
+test("password-recovery Auth evidence remains authenticated Cloud Learning ownership", async () => {
+  const fixture = createFixture({ rows: { a: learningState("cloud-a") } });
+  fixture.cloud.setCurrentUserId("a");
+  await fixture.runtime.handleAuthState({
+    ...authenticated("a"),
+    authEvent: "PASSWORD_RECOVERY",
+    sessionKind: "password-recovery"
+  });
+
+  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.AUTHENTICATED_CLOUD);
+  assert.equal(fixture.runtime.getState().label, "cloud-a");
+  assert.deepEqual(fixture.savedGuestStates, []);
+});
+
+test("password recovery with missing Cloud Learning stays Account pending and preserves Guest", async () => {
+  const fixture = createFixture({ rows: {}, guestState: meaningfulState("guest") });
+  const guestBefore = structuredClone(fixture.guestState);
+  fixture.cloud.setCurrentUserId("a");
+
+  await fixture.runtime.handleAuthState({
+    ...authenticated("a"),
+    authEvent: "PASSWORD_RECOVERY",
+    sessionKind: "password-recovery"
+  });
+
+  assert.equal(fixture.runtime.getStatus().source, LEARNING_STATE_SOURCES.PENDING_MIGRATION);
+  assert.equal(fixture.runtime.getStatus().syncStatus, CLOUD_SYNC_STATUSES.PENDING_MIGRATION);
+  assert.notEqual(fixture.runtime.getState(), fixture.guestState);
+  assert.deepEqual(fixture.guestState, guestBefore);
+  assert.deepEqual(fixture.savedGuestStates, []);
+  assert.equal(fixture.cloud.calls.create, 0);
+});
+
 test("delayed cloud found transitions blocked Learning surfaces to authenticated ready", async () => {
   let finishLoad;
   const surfaces = {

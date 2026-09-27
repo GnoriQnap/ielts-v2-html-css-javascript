@@ -1,4 +1,4 @@
-import { AUTH_STATUSES } from "./auth-service.js?v=10.2a";
+import { AUTH_STATUSES } from "./auth-service.js?v=10.9d3";
 import { CLOUD_LEARNING_STATE_STATUSES } from "./cloud-learning-state-repository.js?v=10.6b2";
 import { createDefaultAppState } from "./storage.js?v=8.4c1";
 

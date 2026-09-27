@@ -1,5 +1,13 @@
 export const PENDING_SIGNUP_EMAIL_KEY = "ielts_pending_signup_email";
 
+export const AUTH_CALLBACK_CLASSIFICATIONS = Object.freeze({
+  NONE: "none",
+  SIGNUP_CONFIRMATION: "signup-confirmation",
+  PASSWORD_RECOVERY: "password-recovery",
+  INVALID_SIGNUP_CONFIRMATION: "invalid-signup-confirmation",
+  INVALID_PASSWORD_RECOVERY: "invalid-password-recovery"
+});
+
 const AUTH_QUERY_KEYS = [
   "auth",
   "code",
@@ -11,6 +19,14 @@ const AUTH_QUERY_KEYS = [
 ];
 
 export function createEmailConfirmationRedirectUrl(locationRef = globalThis.location) {
+  return createAuthRedirectUrl("confirmed", locationRef);
+}
+
+export function createPasswordRecoveryRedirectUrl(locationRef = globalThis.location) {
+  return createAuthRedirectUrl("recovery", locationRef);
+}
+
+function createAuthRedirectUrl(marker, locationRef) {
   const origin = typeof locationRef?.origin === "string" ? locationRef.origin : "";
   if (!/^https?:\/\//i.test(origin)) {
     throw new TypeError("无法生成邮箱确认回跳地址。");
@@ -19,41 +35,84 @@ export function createEmailConfirmationRedirectUrl(locationRef = globalThis.loca
     ? locationRef.pathname
     : "/";
   const url = new URL(pathname, origin);
-  url.searchParams.set("auth", "confirmed");
+  url.searchParams.set("auth", marker);
   return url.href;
 }
 
-export function inspectEmailConfirmationCallback(urlValue) {
+export function inspectAuthCallback(urlValue, {
+  authEvent = "",
+  sessionKind = ""
+} = {}) {
   let url;
   try {
     url = new URL(String(urlValue));
   } catch {
-    return createEmptyCallback();
+    return createAuthCallbackResult(AUTH_CALLBACK_CLASSIFICATIONS.NONE);
   }
 
   const hashParams = new URLSearchParams(url.hash.replace(/^#/, ""));
   const read = (key) => url.searchParams.get(key) ?? hashParams.get(key);
-  const hasMarker = url.searchParams.get("auth") === "confirmed";
+  const marker = url.searchParams.get("auth") ?? "";
   const type = read("type") ?? "";
   const errorCode = read("error_code") ?? read("error") ?? "";
   const errorDescription = read("error_description") ?? "";
-  const hasConfirmationEvidence = hasMarker && (
-    (type === "signup" && Boolean(hashParams.get("access_token"))) ||
-    Boolean(url.searchParams.get("code")) ||
-    (type === "signup" && Boolean(url.searchParams.get("token_hash")))
-  );
-  const isCallback = hasMarker || (type === "signup" && Boolean(errorCode));
+  const hasCode = Boolean(url.searchParams.get("code"));
+  const hasAccessToken = Boolean(hashParams.get("access_token"));
+  const hasTokenHash = Boolean(read("token_hash"));
+  const hasSignupEvidence = type === "signup" && (hasAccessToken || hasTokenHash);
+  const hasRecoveryEvent = authEvent === "PASSWORD_RECOVERY" ||
+    sessionKind === "password-recovery";
+
+  if (marker === "confirmed" || (!marker && type === "signup" && Boolean(errorCode))) {
+    const validSignupEvidence = marker === "confirmed" && !errorCode && !hasRecoveryEvent &&
+      (hasSignupEvidence || (hasCode && type !== "recovery"));
+    return createAuthCallbackResult(
+      validSignupEvidence
+        ? AUTH_CALLBACK_CLASSIFICATIONS.SIGNUP_CONFIRMATION
+        : AUTH_CALLBACK_CLASSIFICATIONS.INVALID_SIGNUP_CONFIRMATION,
+      { errorCode, errorDescription }
+    );
+  }
+
+  if (marker === "recovery" || (!marker && type === "recovery" && Boolean(errorCode))) {
+    const validRecoveryEvidence = marker === "recovery" && !errorCode &&
+      type !== "signup" && hasRecoveryEvent;
+    return createAuthCallbackResult(
+      validRecoveryEvidence
+        ? AUTH_CALLBACK_CLASSIFICATIONS.PASSWORD_RECOVERY
+        : AUTH_CALLBACK_CLASSIFICATIONS.INVALID_PASSWORD_RECOVERY,
+      { errorCode, errorDescription }
+    );
+  }
+
+  return createAuthCallbackResult(AUTH_CALLBACK_CLASSIFICATIONS.NONE);
+}
+
+export function inspectEmailConfirmationCallback(urlValue) {
+  const callback = inspectAuthCallback(urlValue);
+  const isSignupCallback = [
+    AUTH_CALLBACK_CLASSIFICATIONS.SIGNUP_CONFIRMATION,
+    AUTH_CALLBACK_CLASSIFICATIONS.INVALID_SIGNUP_CONFIRMATION
+  ].includes(callback.classification);
 
   return Object.freeze({
-    isCallback,
-    hasConfirmationEvidence,
-    hasError: Boolean(errorCode),
-    errorCode,
-    errorDescription
+    isCallback: isSignupCallback,
+    hasConfirmationEvidence:
+      callback.classification === AUTH_CALLBACK_CLASSIFICATIONS.SIGNUP_CONFIRMATION,
+    hasError: callback.hasError,
+    errorCode: callback.errorCode,
+    errorDescription: callback.errorDescription
   });
 }
 
 export function cleanEmailConfirmationCallbackUrl({
+  locationRef = globalThis.location,
+  historyRef = globalThis.history
+} = {}) {
+  return cleanAuthCallbackUrl({ locationRef, historyRef });
+}
+
+export function cleanAuthCallbackUrl({
   locationRef = globalThis.location,
   historyRef = globalThis.history
 } = {}) {
@@ -97,12 +156,15 @@ export function createPendingSignupEmailStore({ storage = globalThis.localStorag
   });
 }
 
-function createEmptyCallback() {
+function createAuthCallbackResult(classification, {
+  errorCode = "",
+  errorDescription = ""
+} = {}) {
   return Object.freeze({
-    isCallback: false,
-    hasConfirmationEvidence: false,
-    hasError: false,
-    errorCode: "",
-    errorDescription: ""
+    classification,
+    isCallback: classification !== AUTH_CALLBACK_CLASSIFICATIONS.NONE,
+    hasError: Boolean(errorCode),
+    errorCode,
+    errorDescription
   });
 }

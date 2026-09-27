@@ -93,6 +93,46 @@ test("close and Escape are blocked while account creation is in flight", async (
   assert.equal(fixture.overlay.hidden, true);
 });
 
+test("password recovery defers Learning setup and preserves future normal auto-open", () => {
+  const fixture = createFixture({ deferAutoOpen: true });
+  const guestBefore = structuredClone(fixture.guestSnapshot);
+  fixture.controller.update(pendingStatus());
+
+  assert.equal(fixture.overlay.hidden, true);
+  assert.equal(fixture.controller.isOpen(), false);
+  assert.equal(fixture.calls.saveGuest, 0);
+  assert.equal(fixture.calls.startFresh, 0);
+  assert.equal(fixture.calls.createCloudLearningState, 0);
+  assert.equal(fixture.status.source, "pending-migration");
+  assert.deepEqual(fixture.guestSnapshot, guestBefore);
+
+  fixture.deferAutoOpen = false;
+  fixture.controller.update(pendingStatus());
+  assert.equal(fixture.overlay.hidden, false);
+});
+
+test("PASSWORD_RECOVERY priority closes open Learning setup without releasing Auth-owned inert", () => {
+  const fixture = createFixture();
+  fixture.authFocus.focus();
+  fixture.controller.update(pendingStatus());
+  assert.equal(fixture.overlay.hidden, false);
+
+  fixture.deferAutoOpen = true;
+  fixture.controller.update(pendingStatus());
+
+  assert.equal(fixture.overlay.hidden, true);
+  assert.equal(fixture.documentRef.activeElement, fixture.authFocus);
+  assert.equal(fixture.background.hasAttribute("inert"), false);
+  assert.equal(fixture.blockedLearningSurface.hasAttribute("inert"), true);
+  assert.equal(fixture.calls.saveGuest, 0);
+  assert.equal(fixture.calls.startFresh, 0);
+  assert.equal(fixture.status.source, "pending-migration");
+
+  fixture.deferAutoOpen = false;
+  fixture.controller.update(pendingStatus());
+  assert.equal(fixture.overlay.hidden, false);
+});
+
 test("mobile setup actions stack without changing desktop card width", async () => {
   const css = await readFile(new URL("../css/base.css", import.meta.url), "utf8");
   assert.match(css, /\.cloud-learning-setup-card\s*\{\s*width:\s*min\(100%,\s*480px\)/);
@@ -102,7 +142,7 @@ test("mobile setup actions stack without changing desktop card width", async () 
   assert.match(css, /\.account-dialog-close\s*\{[^}]*width:\s*40px;[^}]*height:\s*40px/);
 });
 
-function createFixture({ fail = false, deferred = false } = {}) {
+function createFixture({ fail = false, deferred = false, deferAutoOpen = false } = {}) {
   const documentRef = new FakeDocument();
   const elements = {
     open: new FakeElement(documentRef),
@@ -116,6 +156,7 @@ function createFixture({ fail = false, deferred = false } = {}) {
   elements.overlay.hidden = true;
   const body = new FakeElement(documentRef);
   const background = new FakeElement(documentRef);
+  const authFocus = new FakeElement(documentRef);
   const blockedLearningSurface = new FakeElement(documentRef);
   blockedLearningSurface.setAttribute("inert", "");
   const calls = {
@@ -132,9 +173,12 @@ function createFixture({ fail = false, deferred = false } = {}) {
     ...elements,
     body,
     background,
+    authFocus,
     blockedLearningSurface,
     documentRef,
     calls,
+    deferAutoOpen,
+    guestSnapshot: { learning: { byWordKey: { guest: { status: "review" } } } },
     finishDeferred: () => resolveDeferred?.(),
     status: pendingStatus()
   };
@@ -161,7 +205,8 @@ function createFixture({ fail = false, deferred = false } = {}) {
     elements,
     body,
     backgroundElements: [background, blockedLearningSurface],
-    documentRef
+    documentRef,
+    shouldDeferAutoOpen: () => fixture.deferAutoOpen
   });
   return fixture;
 }

@@ -339,11 +339,15 @@
         </header>
 
         <form id="account-form" class="account-form" novalidate>
-          <label for="account-email">邮箱</label>
-          <input id="account-email" name="email" type="email" autocomplete="email" inputmode="email" required>
+          <div id="account-email-row" class="account-field-row">
+            <label for="account-email">邮箱</label>
+            <input id="account-email" name="email" type="email" autocomplete="email" inputmode="email" required>
+          </div>
 
-          <label for="account-password">密码</label>
-          <input id="account-password" name="password" type="password" autocomplete="current-password" required>
+          <div id="account-password-row" class="account-field-row">
+            <label id="account-password-label" for="account-password">密码</label>
+            <input id="account-password" name="password" type="password" autocomplete="current-password" required>
+          </div>
 
           <div id="account-confirm-row" class="account-confirm-row" hidden>
             <label for="account-confirm-password">确认密码</label>
@@ -351,6 +355,9 @@
           </div>
 
           <button id="account-submit" class="button button-primary button-full" type="submit">登录</button>
+          <button id="account-form-secondary" class="button button-secondary button-full" type="button" hidden>返回登录</button>
+          <button id="account-forgot-password" class="account-mode-toggle" type="button">忘记密码？</button>
+          <button id="account-resend-confirmation" class="account-mode-toggle" type="button" hidden>重新发送确认邮件</button>
           <p class="account-local-note">未登录也可以正常学习，当前进度会保存在此设备。</p>
         </form>
 
@@ -370,6 +377,7 @@
           <p>确认邮件已发送至：</p>
           <strong id="account-pending-email" class="account-email-display"></strong>
           <p class="account-local-note">请前往邮箱点击确认链接完成注册。</p>
+          <button id="account-pending-resend" class="button button-primary button-full" type="button">重新发送确认邮件</button>
           <button id="account-pending-return-login" class="button button-secondary button-full" type="button">返回登录</button>
         </section>
 
@@ -433,6 +441,6 @@
       </section>
     </div>
 
-    <script type="module" src="./js/app.js?v=10.9b5"></script>
+    <script type="module" src="./js/app.js?v=10.9d3c"></script>
   </body>
 </html>

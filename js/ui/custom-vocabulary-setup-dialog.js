@@ -10,11 +10,14 @@ export function createCustomVocabularySetupDialog({
   runtimeActions,
   elements,
   body,
-  backgroundElements = []
+  backgroundElements = [],
+  documentRef = globalThis.document,
+  shouldDeferAutoOpen = () => false
 }) {
   let isOpen = false;
   let isSubmitting = false;
   let openedForUserId = null;
+  let returnFocusElement = null;
   const addedInertElements = new Set();
 
   elements.open.addEventListener("click", open);
@@ -54,6 +57,12 @@ export function createCustomVocabularySetupDialog({
       ? "账号从零开始不会删除这台设备上的访客词汇。"
       : "从零开始不会删除这台设备上的访客词汇。";
 
+    if (shouldDeferAutoOpen()) {
+      if (isOpen) closeForDeferral();
+      openedForUserId = null;
+      return;
+    }
+
     if (!requiresDialog) {
       if (isOpen) closeAfterResolution();
       if (status.source === CUSTOM_VOCABULARY_SOURCES.GUEST_LOCAL) openedForUserId = null;
@@ -69,7 +78,9 @@ export function createCustomVocabularySetupDialog({
   }
 
   function open() {
+    if (shouldDeferAutoOpen()) return;
     if (elements.open.hidden && !runtimeActions.getStatus().migrationRequired) return;
+    if (!isOpen) returnFocusElement = documentRef?.activeElement ?? elements.open;
     elements.overlay.hidden = false;
     elements.overlay.setAttribute("aria-hidden", "false");
     elements.overlay.classList.add("is-open");
@@ -112,14 +123,25 @@ export function createCustomVocabularySetupDialog({
   }
 
   function closeAfterResolution() {
+    const focusTarget = returnFocusElement;
+    setBackgroundInert(false);
+    if (focusTarget?.isConnected) {
+      try { focusTarget.focus(); } catch { /* Cleanup must not depend on focus restoration. */ }
+    }
     elements.overlay.hidden = true;
     elements.overlay.setAttribute("aria-hidden", "true");
     elements.overlay.classList.remove("is-open");
     body.classList.remove("custom-vocabulary-setup-open");
-    setBackgroundInert(false);
     isOpen = false;
     isSubmitting = false;
+    returnFocusElement = null;
     elements.feedback.textContent = "";
+  }
+
+  function closeForDeferral() {
+    const wasSubmitting = isSubmitting;
+    closeAfterResolution();
+    isSubmitting = wasSubmitting;
   }
 
   function setBackgroundInert(inert) {

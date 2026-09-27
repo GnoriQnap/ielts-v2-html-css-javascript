@@ -33,11 +33,17 @@ test("startup preloads the large default details module and contains no artifici
 
   assert.match(html, /rel="modulepreload" href="\.\/js\/data\/default-vocabulary\.js"/);
   assert.match(html, /rel="modulepreload" href="\.\/js\/data\/vocabulary-details\.js"/);
-  assert.match(app, /const shouldHoldInitialLearningState = hasPersistedSupabaseSession\(\)/);
+  assert.match(app, /const shouldHoldInitialLearningState = hasPersistedSupabaseSession\(\) \|\|/);
   assert.match(app, /if \(!shouldHoldInitialLearningState\) \{\s*renderInitialLearningState\(\)/);
   assert.match(app, /if \(shouldHoldInitialLearningState\) \{[\s\S]*practiceMain\.inert = true/);
   assert.match(app, /function markLearningSurfaceReady\(\)[\s\S]*practiceMain\.inert = false/);
-  assert.match(app, /await customVocabularyIntegration\?\.handleAuthState\(authState\)/);
+  assert.match(
+    app,
+    /dispatchOwnershipState:\s*\(authState\)\s*=>\s*customVocabularyIntegration\.handleAuthState\(authState\)/
+  );
+  const authInitialization = app.match(/async function initializeAuthentication\(\)[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(authInitialization, /signupConfirmationStartupCoordinator\.initialize\(\)/);
+  assert.doesNotMatch(authInitialization, /customVocabularyIntegration\.handleAuthState/);
   assert.doesNotMatch(
     app,
     /if \(!hasRenderedLearningState && learningStateRuntime\)[\s\S]*?applyRuntimeLearningState/

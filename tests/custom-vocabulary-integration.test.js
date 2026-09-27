@@ -242,6 +242,43 @@ test("persisted account resolves Custom vocabulary before Learning normalization
   assert.equal("definitely-not-in-vocabulary" in fixture.learning.normalized.learning.byWordKey, false);
 });
 
+test("password-recovery Auth evidence preserves Account Custom and Learning ownership", async () => {
+  const fixture = createFixture({
+    guestWord: "guest only",
+    rows: { a: { snapshot: snapshot("account only"), revision: 4, updatedAt: null } }
+  });
+  fixture.cloud.setActiveUser("a");
+
+  await fixture.integration.handleAuthState({
+    ...authenticated("a"),
+    authEvent: "PASSWORD_RECOVERY",
+    sessionKind: "password-recovery"
+  });
+
+  assert.equal(fixture.runtime.getStatus().source, CUSTOM_VOCABULARY_SOURCES.AUTHENTICATED_CLOUD);
+  assert.equal(fixture.getLiveIndex().displayByWordKey.has("account only"), true);
+  assert.equal(fixture.getLiveIndex().displayByWordKey.has("guest only"), false);
+  assert.equal(fixture.learning.calls.length, 1);
+});
+
+test("password recovery retains unresolved Account Custom ownership without starting Learning", async () => {
+  const fixture = createFixture({ guestWord: "guest recovery word" });
+  fixture.cloud.setActiveUser("a");
+  const guestBefore = structuredClone(fixture.getGuestVocabulary());
+
+  const result = await fixture.integration.handleAuthState({
+    ...authenticated("a"),
+    authEvent: "PASSWORD_RECOVERY",
+    sessionKind: "password-recovery"
+  });
+
+  assert.equal(result.status, "pending-migration");
+  assert.equal(fixture.runtime.getStatus().source, CUSTOM_VOCABULARY_SOURCES.PENDING_MIGRATION);
+  assert.equal(fixture.cloud.calls.create.length, 0);
+  assert.equal(fixture.learning.calls.length, 0);
+  assert.deepEqual(fixture.getGuestVocabulary(), guestBefore);
+});
+
 test("Custom load error without userId blocks Learning and leaves unavailable status", async () => {
   const cloud = createCloud();
   cloud.loadCustomVocabulary = async () => ({ ok: false, status: "error" });

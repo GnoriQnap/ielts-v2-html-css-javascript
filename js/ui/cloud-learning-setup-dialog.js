@@ -1,14 +1,15 @@
 import {
   CLOUD_SYNC_STATUSES,
   LEARNING_STATE_SOURCES
-} from "../core/learning-state-runtime.js?v=10.9b5";
+} from "../core/learning-state-runtime.js?v=10.9d3";
 
 export function createCloudLearningSetupDialog({
   runtimeActions,
   elements,
   body,
   backgroundElements = [],
-  documentRef = globalThis.document
+  documentRef = globalThis.document,
+  shouldDeferAutoOpen = () => false
 }) {
   let isOpen = false;
   let isSubmitting = false;
@@ -30,6 +31,12 @@ export function createCloudLearningSetupDialog({
     elements.saveGuest.disabled = status.migrationInProgress;
     elements.startFresh.disabled = status.migrationInProgress;
 
+    if (shouldDeferAutoOpen()) {
+      if (isOpen) closeForDeferral();
+      autoOpenedUserId = null;
+      return;
+    }
+
     if (!isPending) {
       if (isOpen) close();
       if (status.source === LEARNING_STATE_SOURCES.GUEST) autoOpenedUserId = null;
@@ -49,6 +56,7 @@ export function createCloudLearningSetupDialog({
   }
 
   function open() {
+    if (shouldDeferAutoOpen()) return;
     if (!elements.open.hidden) returnFocusElement = documentRef?.activeElement ?? elements.open;
     elements.overlay.hidden = false;
     elements.overlay.setAttribute("aria-hidden", "false");
@@ -62,17 +70,23 @@ export function createCloudLearningSetupDialog({
 
   function close() {
     const focusTarget = returnFocusElement;
+    setBackgroundInert(false);
+    if (focusTarget?.isConnected) {
+      try { focusTarget.focus(); } catch { /* Cleanup must not depend on focus restoration. */ }
+    }
     elements.overlay.hidden = true;
     elements.overlay.setAttribute("aria-hidden", "true");
     elements.overlay.classList.remove("is-open");
     body.classList.remove("cloud-learning-setup-open");
-    setBackgroundInert(false);
     isOpen = false;
     isSubmitting = false;
     returnFocusElement = null;
-    if (focusTarget?.isConnected) {
-      try { focusTarget.focus(); } catch { /* Cleanup must not depend on focus restoration. */ }
-    }
+  }
+
+  function closeForDeferral() {
+    const wasSubmitting = isSubmitting;
+    close();
+    isSubmitting = wasSubmitting;
   }
 
   function requestClose() {

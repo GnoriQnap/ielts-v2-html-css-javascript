@@ -1,4 +1,4 @@
-import { AUTH_STATUSES } from "./auth-service.js?v=10.2a";
+import { AUTH_STATUSES } from "./auth-service.js?v=10.9d3";
 import {
   composeVocabulary,
   createCustomVocabularySnapshot,

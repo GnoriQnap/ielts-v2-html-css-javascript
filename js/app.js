@@ -79,7 +79,7 @@ import { createVocabularyCard } from "./ui/vocabulary-card.js?v=8.4c";
 import {
   createVocabularyCardOverlayController
 } from "./ui/vocabulary-card-overlay.js?v=10.9b5";
-import { createAuthService } from "./core/auth-service.js?v=10.2a";
+import { createAuthService } from "./core/auth-service.js?v=10.9d3";
 import { hasPersistedSupabaseSession } from "./core/supabase-client.js?v=10.7c";
 import { createCloudLearningStateRepository } from "./core/cloud-learning-state-repository.js?v=10.6b2";
 import { createCloudCustomVocabularyRepository } from "./core/cloud-custom-vocabulary-repository.js?v=10.8c";
@@ -88,7 +88,7 @@ import {
   createLearningStateRuntime,
   LEARNING_STATE_SOURCES,
   PERSISTENCE_INTENTS
-} from "./core/learning-state-runtime.js?v=10.9b5";
+} from "./core/learning-state-runtime.js?v=10.9d3";
 import {
   CUSTOM_VOCABULARY_CREATE_ACTIONS,
   CUSTOM_VOCABULARY_MIGRATION_KINDS,
@@ -99,15 +99,18 @@ import {
 import {
   createCustomVocabularyIntegration,
   isActiveQuestionRenderable
-} from "./core/custom-vocabulary-integration.js?v=10.8d2";
+} from "./core/custom-vocabulary-integration.js?v=10.9d3";
 import {
+  cleanAuthCallbackUrl,
   cleanEmailConfirmationCallbackUrl,
   createPendingSignupEmailStore,
   inspectEmailConfirmationCallback
-} from "./core/auth-confirmation.js?v=10.2a";
-import { createAuthDialogController } from "./ui/auth-dialog.js?v=10.9b5";
-import { createCloudLearningSetupDialog } from "./ui/cloud-learning-setup-dialog.js?v=10.9b5";
-import { createCustomVocabularySetupDialog } from "./ui/custom-vocabulary-setup-dialog.js?v=10.8d2";
+} from "./core/auth-confirmation.js?v=10.9d3";
+import { createAuthRecoveryStartupCoordinator } from "./core/auth-recovery-startup.js?v=10.9d3a";
+import { createSignupConfirmationStartupCoordinator } from "./core/auth-signup-confirmation-startup.js?v=10.9d3b1";
+import { createAuthDialogController } from "./ui/auth-dialog.js?v=10.9d3b1";
+import { createCloudLearningSetupDialog } from "./ui/cloud-learning-setup-dialog.js?v=10.9d3c";
+import { createCustomVocabularySetupDialog } from "./ui/custom-vocabulary-setup-dialog.js?v=10.9d3c";
 import {
   createMainNavigationState,
   MAIN_VIEWS
@@ -218,11 +221,17 @@ const elements = {
   accountDialogTitle: document.querySelector("#account-dialog-title"),
   accountDialogClose: document.querySelector("#account-dialog-close"),
   accountForm: document.querySelector("#account-form"),
+  accountEmailRow: document.querySelector("#account-email-row"),
   accountEmail: document.querySelector("#account-email"),
+  accountPasswordRow: document.querySelector("#account-password-row"),
+  accountPasswordLabel: document.querySelector("#account-password-label"),
   accountPassword: document.querySelector("#account-password"),
   accountConfirmRow: document.querySelector("#account-confirm-row"),
   accountConfirmPassword: document.querySelector("#account-confirm-password"),
   accountSubmit: document.querySelector("#account-submit"),
+  accountFormSecondary: document.querySelector("#account-form-secondary"),
+  accountForgotPassword: document.querySelector("#account-forgot-password"),
+  accountResendConfirmation: document.querySelector("#account-resend-confirmation"),
   accountPanel: document.querySelector("#account-panel"),
   accountEmailDisplay: document.querySelector("#account-email-display"),
   accountCloudStatus: document.querySelector("#account-cloud-status"),
@@ -234,6 +243,7 @@ const elements = {
   accountSignOut: document.querySelector("#account-sign-out"),
   accountConfirmationPending: document.querySelector("#account-confirmation-pending"),
   accountPendingEmail: document.querySelector("#account-pending-email"),
+  accountPendingResend: document.querySelector("#account-pending-resend"),
   accountPendingReturnLogin: document.querySelector("#account-pending-return-login"),
   accountConfirmationResult: document.querySelector("#account-confirmation-result"),
   accountConfirmationMessage: document.querySelector("#account-confirmation-message"),
@@ -260,6 +270,7 @@ let learningStateRuntime = null;
 let customVocabularyRuntime = null;
 let customVocabularyIntegration = null;
 let customVocabularySetupDialogController = null;
+let signupConfirmationStartupCoordinator = null;
 let persistenceError = "";
 let dismissedCompletionRoundId = null;
 let completionWasOpen = false;
@@ -302,8 +313,11 @@ const vocabularyCardOverlayController = createVocabularyCardOverlayController({
 
 const authService = createAuthService();
 const pendingSignupEmailStore = createPendingSignupEmailStore();
-const emailConfirmationCallback = inspectEmailConfirmationCallback(window.location.href);
-const shouldHoldInitialLearningState = hasPersistedSupabaseSession();
+const initialAuthCallbackUrl = window.location.href;
+const emailConfirmationCallback = inspectEmailConfirmationCallback(initialAuthCallbackUrl);
+const shouldHoldInitialLearningState = hasPersistedSupabaseSession() || Boolean(
+  emailConfirmationCallback.isCallback && emailConfirmationCallback.hasConfirmationEvidence
+);
 learningSurfaceBlocked = shouldHoldInitialLearningState;
 if (shouldHoldInitialLearningState) {
   elements.practiceMain.inert = true;
@@ -319,17 +333,24 @@ const authDialogController = createAuthDialogController({
     title: elements.accountDialogTitle,
     close: elements.accountDialogClose,
     form: elements.accountForm,
+    emailRow: elements.accountEmailRow,
     email: elements.accountEmail,
+    passwordRow: elements.accountPasswordRow,
+    passwordLabel: elements.accountPasswordLabel,
     password: elements.accountPassword,
     confirmRow: elements.accountConfirmRow,
     confirmPassword: elements.accountConfirmPassword,
     submit: elements.accountSubmit,
+    formSecondary: elements.accountFormSecondary,
+    forgotPassword: elements.accountForgotPassword,
+    resendConfirmation: elements.accountResendConfirmation,
     modeToggle: elements.accountModeToggle,
     accountPanel: elements.accountPanel,
     accountEmail: elements.accountEmailDisplay,
     signOut: elements.accountSignOut,
     pendingPanel: elements.accountConfirmationPending,
     pendingEmail: elements.accountPendingEmail,
+    pendingResend: elements.accountPendingResend,
     pendingReturnLogin: elements.accountPendingReturnLogin,
     confirmationPanel: elements.accountConfirmationResult,
     confirmationMessage: elements.accountConfirmationMessage,
@@ -346,7 +367,24 @@ const authDialogController = createAuthDialogController({
   ],
   documentRef: document,
   locationRef: window.location,
-  pendingEmailStore: pendingSignupEmailStore
+  pendingEmailStore: pendingSignupEmailStore,
+  onConfirmationSignOutResolved: (authState) => {
+    return signupConfirmationStartupCoordinator?.releaseAfterConfirmationSignOut(authState);
+  }
+});
+const authRecoveryStartupCoordinator = createAuthRecoveryStartupCoordinator({
+  callbackUrl: initialAuthCallbackUrl,
+  establishRecoveryUi: (callback) => {
+    const result = authDialogController.handlePasswordRecoveryCallback(callback);
+    if (result?.success && authDialogController.isRecoveryBlocking()) {
+      reevaluateSetupDialogsForRecovery();
+      authDialogController.open();
+    }
+  },
+  cleanCallbackUrl: () => cleanAuthCallbackUrl({
+    locationRef: window.location,
+    historyRef: window.history
+  })
 });
 const cloudLearningSetupDialogController = createCloudLearningSetupDialog({
   runtimeActions: {
@@ -370,7 +408,8 @@ const cloudLearningSetupDialogController = createCloudLearningSetupDialog({
     elements.vocabularyManagerMain,
     elements.accountOverlay
   ],
-  documentRef: document
+  documentRef: document,
+  shouldDeferAutoOpen: () => authDialogController.isRecoveryBlocking()
 });
 
 elements.submit.addEventListener("click", submitAnswer);
@@ -471,6 +510,19 @@ if (report.isValid) {
     holdLearningSurface,
     onVocabularyReady: handleVocabularyOwnershipReady
   });
+  signupConfirmationStartupCoordinator = createSignupConfirmationStartupCoordinator({
+    authService,
+    signupCallback: emailConfirmationCallback,
+    handleSignupConfirmation: (callback) => (
+      authDialogController.handleEmailConfirmationCallback(callback)
+    ),
+    cleanSignupCallback: () => cleanEmailConfirmationCallbackUrl({
+      locationRef: window.location,
+      historyRef: window.history
+    }),
+    handleRecoveryAuthState: (authState) => authRecoveryStartupCoordinator.handleAuthState(authState),
+    dispatchOwnershipState: (authState) => customVocabularyIntegration.handleAuthState(authState)
+  });
   customVocabularySetupDialogController = createCustomVocabularySetupDialog({
     integrationActions: {
       completeMigration: (action) => customVocabularyIntegration.completeMigration(action)
@@ -496,7 +548,9 @@ if (report.isValid) {
       elements.vocabularyManagerMain,
       elements.accountOverlay,
       elements.cloudLearningSetupOverlay
-    ]
+    ],
+    documentRef: document,
+    shouldDeferAutoOpen: () => authDialogController.isRecoveryBlocking()
   });
   dismissedCompletionRoundId = appState.rounds.lastCompletedSummary?.roundId ?? null;
 
@@ -504,9 +558,7 @@ if (report.isValid) {
     renderInitialLearningState();
   }
   authService.subscribe((authState) => {
-    if (authState.status !== "loading") {
-      void customVocabularyIntegration.handleAuthState(authState);
-    }
+    void signupConfirmationStartupCoordinator.handleAuthState(authState);
   });
 } else {
   showFatalError(report.errors.map((item) => item.message).join(" "));
@@ -738,6 +790,11 @@ function renderCustomVocabularyStatus(status) {
   customVocabularySetupDialogController?.update(status);
 }
 
+function reevaluateSetupDialogsForRecovery() {
+  customVocabularySetupDialogController?.update(customVocabularyRuntime?.getStatus() ?? {});
+  cloudLearningSetupDialogController.update(learningStateRuntime?.getStatus() ?? {});
+}
+
 async function reloadCustomVocabularyAfterConflict() {
   const result = await customVocabularyIntegration?.reloadAfterConflict();
   if (result?.ok) {
@@ -749,17 +806,11 @@ async function reloadCustomVocabularyAfterConflict() {
 void initializeAuthentication();
 
 async function initializeAuthentication() {
-  const authState = await authService.initialize();
-  await customVocabularyIntegration?.handleAuthState(authState);
-  if (!emailConfirmationCallback.isCallback) return;
-  try {
-    await authDialogController.handleEmailConfirmationCallback(emailConfirmationCallback);
-  } finally {
-    cleanEmailConfirmationCallbackUrl({
-      locationRef: window.location,
-      historyRef: window.history
-    });
+  if (signupConfirmationStartupCoordinator) {
+    await signupConfirmationStartupCoordinator.initialize();
+    return;
   }
+  await authService.initialize();
 }
 
 function showNextQuestion() {
