@@ -1,0 +1,7 @@
+{
+  "name": "ielts-v2-html-css-javascript",
+  "compatibility_date": "2026-09-28",
+  "assets": {
+    "directory": "./dist"
+  }
+}
